@@ -1,0 +1,22 @@
+services:
+  api-blue:
+    build: .
+    container_name: finvestima-api-blue
+    restart: unless-stopped
+    env_file: .env
+    network_mode: host
+    environment:
+      - ASPNETCORE_URLS=http://+:6000
+    volumes:
+      - ./logs:/app/logs
+
+  api-green:
+    build: .
+    container_name: finvestima-api-green
+    restart: unless-stopped
+    env_file: .env
+    network_mode: host
+    environment:
+      - ASPNETCORE_URLS=http://+:6001
+    volumes:
+      - ./logs:/app/logs
