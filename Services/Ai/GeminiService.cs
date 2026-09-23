@@ -140,13 +140,37 @@ namespace FinvestimaAPI.Services.Ai
             "text/csv", "text/plain", "application/csv", "application/vnd.ms-excel"
         };
 
-        public async Task<FinancialExtractionResultDto?> ExtractFinancialDataAsync(byte[] fileBytes, string mimeType)
+        public Task<FinancialExtractionResultDto?> ExtractFinancialDataAsync(byte[] fileBytes, string mimeType)
         {
-            var sampleBytes = await File.ReadAllBytesAsync(SamplePath);
-
             object realDocumentPart = TextMimeTypes.Contains(mimeType)
                 ? new { text = "```csv\n" + Encoding.UTF8.GetString(fileBytes) + "\n```" }
                 : new { inline_data = new { mime_type = mimeType, data = Convert.ToBase64String(fileBytes) } };
+
+            return ExtractFinancialDataFromPartsAsync(new[] { realDocumentPart });
+        }
+
+        public Task<FinancialExtractionResultDto?> ExtractFinancialDataFromPagesAsync(IReadOnlyList<(byte[] Bytes, string MimeType)> pages)
+        {
+            var parts = pages
+                .Select(p => (object)new { inline_data = new { mime_type = p.MimeType, data = Convert.ToBase64String(p.Bytes) } })
+                .ToArray();
+
+            return ExtractFinancialDataFromPartsAsync(parts);
+        }
+
+        private async Task<FinancialExtractionResultDto?> ExtractFinancialDataFromPartsAsync(IReadOnlyList<object> realDocumentParts)
+        {
+            var sampleBytes = await File.ReadAllBytesAsync(SamplePath);
+
+            var parts = new List<object>
+            {
+                new { text = "SAMPLE document:" },
+                new { inline_data = new { mime_type = "image/png", data = Convert.ToBase64String(sampleBytes) } },
+                new { text = "Correct structured JSON extraction for the sample document above:\n" + SampleOutputJson },
+                new { text = "Now here is the REAL document to extract:" },
+            };
+            parts.AddRange(realDocumentParts);
+            parts.Add(new { text = ExtractionPrompt });
 
             var requestBody = new
             {
@@ -154,15 +178,7 @@ namespace FinvestimaAPI.Services.Ai
                 {
                     new
                     {
-                        parts = new object[]
-                        {
-                            new { text = "SAMPLE document:" },
-                            new { inline_data = new { mime_type = "image/png", data = Convert.ToBase64String(sampleBytes) } },
-                            new { text = "Correct structured JSON extraction for the sample document above:\n" + SampleOutputJson },
-                            new { text = "Now here is the REAL document to extract:" },
-                            realDocumentPart,
-                            new { text = ExtractionPrompt }
-                        }
+                        parts = parts.ToArray()
                     }
                 },
                 generationConfig = new

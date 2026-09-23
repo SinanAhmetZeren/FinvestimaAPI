@@ -13,6 +13,8 @@ namespace FinvestimaAPI.Models
         public Guid Id { get; set; }
         public string UserId { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
+        public string? DocumentType { get; set; }
+        public string? Years { get; set; }
         public ExtractionJobStatus Status { get; set; } = ExtractionJobStatus.Pending;
         public string? ResultJson { get; set; }
         public string? ErrorMessage { get; set; }
