@@ -6,5 +6,6 @@ namespace FinvestimaAPI.Dtos.AiDtos
         public double SuggestedTopPercent { get; set; }
         public double SuggestedBottomPercent { get; set; }
         public int PageCount { get; set; } = 1;
+        public int PreviewPage { get; set; } = 1;
     }
 }

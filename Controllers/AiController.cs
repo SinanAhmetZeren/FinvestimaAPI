@@ -84,7 +84,7 @@ namespace FinvestimaAPI.Controllers
 
         [HttpPost("extract-financials/preview")]
         [RequestSizeLimit(20_000_000)]
-        public async Task<IActionResult> ExtractFinancialsPreview(IFormFile file)
+        public async Task<IActionResult> ExtractFinancialsPreview(IFormFile file, [FromForm] string? page)
         {
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
@@ -100,13 +100,17 @@ namespace FinvestimaAPI.Controllers
             {
                 byte[] previewSourceBytes;
                 var pageCount = 1;
+                var requestedPage = int.TryParse(page, out var p) && p > 0 ? p : 1;
+
                 if (mimeType == "application/pdf" || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
-                    previewSourceBytes = LogoRedactionHelper.RasterizePdfFirstPageToPng(bytes);
                     pageCount = LogoRedactionHelper.GetPdfPageCount(bytes);
+                    requestedPage = Math.Clamp(requestedPage, 1, pageCount);
+                    previewSourceBytes = LogoRedactionHelper.RasterizePdfPagesToPng(bytes, new[] { requestedPage - 1 })[0];
                 }
                 else if (ImageMimeTypes.Contains(mimeType) || IsImageFileName(fileName))
                 {
+                    requestedPage = 1;
                     previewSourceBytes = bytes;
                 }
                 else
@@ -122,6 +126,7 @@ namespace FinvestimaAPI.Controllers
                     SuggestedTopPercent = topPercent,
                     SuggestedBottomPercent = bottomPercent,
                     PageCount = pageCount,
+                    PreviewPage = requestedPage,
                 });
             }
             catch (Exception ex)
