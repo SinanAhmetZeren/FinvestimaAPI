@@ -3,6 +3,7 @@ using FinvestimaAPI.Models;
 using FinvestimaAPI.Services.Token;
 using FinvestimaAPI.Services.EmailSender;
 using FinvestimaAPI.Services.Ai;
+using FinvestimaAPI.Services.ExchangeRate;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +79,8 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();
+builder.Services.AddHttpClient<ITcmbExchangeRateService, TcmbExchangeRateService>();
+builder.Services.AddHostedService<ExchangeRateBackgroundService>();
 
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {

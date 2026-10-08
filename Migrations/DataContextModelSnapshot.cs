@@ -111,6 +111,46 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ExchangeRate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("EurTryForexBuying")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("EurTryForexSelling")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("EurUsdCrossRate")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("GbpTryForexBuying")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("GbpTryForexSelling")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("UsdTryForexBuying")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("UsdTryForexSelling")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date")
+                        .IsUnique();
+
+                    b.ToTable("ExchangeRates");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.FinancialExtractionJob", b =>
                 {
                     b.Property<Guid>("Id")

@@ -9,6 +9,7 @@ namespace FinvestimaAPI.Data
         public DataContext(DbContextOptions<DataContext> options) : base(options) { }
 
         public DbSet<FinancialExtractionJob> FinancialExtractionJobs { get; set; }
+        public DbSet<ExchangeRate> ExchangeRates { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -16,6 +17,10 @@ namespace FinvestimaAPI.Data
 
             modelBuilder.Entity<AppUser>()
                 .HasIndex(u => u.PublicId)
+                .IsUnique();
+
+            modelBuilder.Entity<ExchangeRate>()
+                .HasIndex(r => r.Date)
                 .IsUnique();
         }
     }
