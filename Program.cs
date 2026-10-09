@@ -79,8 +79,10 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();
+builder.Services.AddHttpClient<IGeminiPrepService, GeminiPrepService>();
 builder.Services.AddHttpClient<ITcmbExchangeRateService, TcmbExchangeRateService>();
 builder.Services.AddHostedService<ExchangeRateBackgroundService>();
+builder.Services.AddScoped<FinvestimaAPI.Services.ValuatorPro.IMizanExtractionService, FinvestimaAPI.Services.ValuatorPro.MizanExtractionService>();
 
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {

@@ -16,14 +16,14 @@ namespace FinvestimaAPI.Controllers
     [Route("api/[controller]")]
     public class AiController : ControllerBase
     {
-        private readonly IGeminiService _geminiService;
+        private readonly IGeminiPrepService _geminiService;
         private readonly DataContext _context;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AiController> _logger;
         private readonly IWebHostEnvironment _env;
 
         public AiController(
-            IGeminiService geminiService,
+            IGeminiPrepService geminiService,
             DataContext context,
             IServiceScopeFactory scopeFactory,
             ILogger<AiController> logger,
@@ -291,7 +291,7 @@ namespace FinvestimaAPI.Controllers
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-            var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiService>();
+            var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiPrepService>();
 
             var job = await db.FinancialExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
             if (job == null) return;
@@ -332,7 +332,7 @@ namespace FinvestimaAPI.Controllers
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-            var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiService>();
+            var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiPrepService>();
 
             var job = await db.FinancialExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
             if (job == null) return;

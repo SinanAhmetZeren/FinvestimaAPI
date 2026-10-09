@@ -1,0 +1,67 @@
+FINVESTIMA — DB UPDATE & DEPLOY ADIMLARI
+==========================================
+Bu dosyadaki adımlar, kullanıcı "deploy" ya da "db update" dediğinde
+tekrar tekrar sorulmadan uygulanır. Sunucu: 168.119.119.25, kullanıcı: deploy.
+
+ŞİFRE: Sadece SSH/sudo şifresi (deploy@168.119.119.25, "L...1...**" ile
+başlayan) her seferinde kullanıcıdan taze istenir, hiçbir yere kaydedilmez.
+Postgres şifresi AYRICA SORULMAZ — yerel
+/Users/ahmetzeren/Repos/Finvestima/FinvestimaAPI/.env dosyasındaki
+ConnectionStrings__DefaultConnection satırından okunur (orada zaten duruyor).
+
+------------------------------------------
+1) BACKEND DEPLOY (FinvestimaAPI)
+------------------------------------------
+Sunucuda git yok — kaynak rsync ile senkronize edilir, sonra blue-green
+script'i build edip devreye alır.
+
+  a) rsync (kaynağı sunucuya kopyala, bin/obj hariç):
+     sshpass -p '<SSH_PASS>' rsync -avz --exclude 'bin' --exclude 'obj' \
+       /Users/ahmetzeren/Repos/Finvestima/FinvestimaAPI/ \
+       deploy@168.119.119.25:/root/FinvestimaAPI/
+
+  b) deploy.sh'i çalıştır (blue-green build + health check + nginx swap):
+     sshpass -p '<SSH_PASS>' ssh deploy@168.119.119.25 \
+       "sudo -S bash /root/FinvestimaAPI/deploy.sh" <<< '<SSH_PASS>'
+
+------------------------------------------
+2) FRONTEND DEPLOY (finvestimaweb)
+------------------------------------------
+  a) Build:
+     cd /Users/ahmetzeren/Repos/Finvestima/finvestimaweb && npm run build
+
+  b) Build'i sunucuya rsync et:
+     sshpass -p '<SSH_PASS>' rsync -avz \
+       /Users/ahmetzeren/Repos/Finvestima/finvestimaweb/build/ \
+       deploy@168.119.119.25:/tmp/finvestimaweb_build/
+
+  c) nginx dizinine kopyala (eskiyi silip yenisini koy):
+     sshpass -p '<SSH_PASS>' ssh deploy@168.119.119.25 \
+       "sudo -S bash -c 'rm -rf /var/www/finvestimaweb/* && cp -r /tmp/finvestimaweb_build/. /var/www/finvestimaweb/'" <<< '<SSH_PASS>'
+
+------------------------------------------
+3) DB MIGRATION (prod — tek DB, local/prod ayrımı yok)
+------------------------------------------
+  a) SSH tüneli aç (zaten açık değilse), 5433 → sunucudaki Postgres portu:
+     ssh -L 5433:localhost:<SUNUCUDAKI_PG_PORTU> deploy@168.119.119.25 -N &
+     (Mevcut kurulumda tünel genelde zaten açık; lsof -iTCP:5433 -sTCP:LISTEN
+     ile kontrol edilebilir.)
+
+  b) Migration'ı uygula — bağlantı dizesi zaten yerel .env dosyasında olduğu
+     için ayrı bir env değişkeni geçmeye gerek yok, dotnet otomatik okur:
+     cd /Users/ahmetzeren/Repos/Finvestima/FinvestimaAPI
+     dotnet ef database update
+
+  Not: Yerel .env'deki ConnectionStrings__DefaultConnection prod DB'yi
+  (tünel üzerinden 127.0.0.1:5433) gösteriyor — local/prod ayrımı yok, tek DB.
+
+------------------------------------------
+GENEL
+------------------------------------------
+- Yeni migration eklerken önce `dotnet build` ile derleme hatası olmadığından
+  emin ol, sonra `dotnet ef migrations add <İsim>`.
+- Build/migration/deploy komutlarını kullanıcı "deploy", "db update" vb. açıkça
+  istemeden ÇALIŞTIRMA (global CLAUDE.md kuralı) — ama bir kez istendiğinde,
+  bu dosyadaki adımları tekrar tekrar açıklamadan/sormadan uygula.
+- Şifreleri hiçbir dosyaya, koda ya da hafızaya yazma; sadece bu oturumda
+  kullanıcıdan isteyip komut satırında kullan.

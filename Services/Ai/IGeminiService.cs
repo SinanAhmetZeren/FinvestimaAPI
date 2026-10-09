@@ -1,17 +1,15 @@
-using FinvestimaAPI.Dtos.AiDtos;
+using FinvestimaAPI.Dtos.ValuatorProDtos;
 
 namespace FinvestimaAPI.Services.Ai
 {
     public interface IGeminiService
     {
-        Task<string?> AnalyzeFileAsync(byte[] fileBytes, string mimeType, string prompt);
-        Task<FinancialExtractionResultDto?> ExtractFinancialDataAsync(byte[] fileBytes, string mimeType);
-
         /// <summary>
-        /// Same extraction as ExtractFinancialDataAsync, but for a document represented as an
-        /// ordered set of page images (e.g. redacted per-page PNGs rasterized from a PDF) instead
-        /// of a single file blob. Each entry becomes its own inlineData part, in order.
+        /// Extracts mizan (trial balance) rows from a newly uploaded file into the
+        /// Firma/MizanYil/MizanHesap shape. currentSnapshot is given only as context — the
+        /// response must cover only the years/accounts found in the new file, not restate
+        /// snapshot data.
         /// </summary>
-        Task<FinancialExtractionResultDto?> ExtractFinancialDataFromPagesAsync(IReadOnlyList<(byte[] Bytes, string MimeType)> pages);
+        Task<MizanExtractionResultDto?> ExtractMizanAsync(byte[] fileBytes, string mimeType, MizanExtractionResultDto? currentSnapshot);
     }
 }

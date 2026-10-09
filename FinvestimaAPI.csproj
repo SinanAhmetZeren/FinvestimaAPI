@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <None Include="Resources\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Models\ValuatorPro\*.cs" CopyToOutputDirectory="PreserveNewest" LinkBase="Resources\ValuatorProModels" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,157 @@
+VALUATOR PRO — GEMINI İLE MİZAN EXTRACTION MİMARİSİ (TODO)
+============================================================
+
+AKIŞ
+----
+1. Kullanıcı bir dosya yükler (tek Excel'de her şey olabilir, ya da birden
+   fazla dosya tek tek de yüklenebilir).
+2. Backend, Gemini'ye TEK bir istekte 4 parça gönderir:
+   a) tekduzenHesapları.js dosyasındaki tekduzen_tum_hesaplar string'i
+   b) İlgili tüm modellerin kodu: Firma, MizanYil, MizanHesap sınıflarının
+      C# tanımları — hedef yapı budur. Ayrıca bir JSON şeması yazılmaz;
+      asıl çıktı zaten Gemini API'nin generationConfig.responseSchema
+      parametresiyle (bu model sınıflarından backend'de programatik
+      üretilir) zorlanır, aynı yapıyı üçüncü kez prompt metni olarak
+      tekrarlamaya gerek yok.
+   c) Mevcut snapshot: şu ana kadar DB'de dolu olan veri — yalnızca BAĞLAM
+      olarak verilir. Gemini bu veriyi tekrar üretmez; "bunlar zaten var,
+      tekrar yazma" diye kullanır.
+   d) Yeni yüklenen dosya (ham içerik — Excel ise metne/CSV'ye çevrilmiş
+      hali).
+3. Gemini'den istenen response: yeni dosyanın kapsadığı hücreler
+   (yıl x hesap kodu). Önceden dolu olan veriyi tekrar üretmesi istenmez —
+   bu, LLM'in zaten doğru olan geçmiş veriyi sessizce bozma riskini
+   ortadan kaldırır. Merge/birleştirme işlemi deterministik backend
+   kodunda yapılır, LLM'de değil.
+4. Backend, dönen response'u doğrulayıp (örn. borç toplamı ≈ alacak
+   toplamı kontrolü) ilgili DB tablolarına yazar.
+
+PROMPTA EKLENECEK NOT (hesap kodu hiyerarşisi):
+  Mizanda bir hesabın üst kodu (örn. "100") olmadan, yalnızca alt kırılımı
+  (örn. "100 01" veya "100 01 01 001") görünebilir. Üst ve alt kodun birlikte
+  bulunması zorunlu değildir, mizanın export ayarına göre değişir.
+  Bu yüzden Gemini'ye şu talimat verilecek: eksik gördüğü bir kod seviyesini
+  "muhtemelen vardır" diyerek kendiliğinden uydurup satır eklemeyecek —
+  dosyada gerçekten yazılı olan kod satırlarını, olduğu gibi, birebir
+  çıkaracak.
+
+  3'lü (ana kod) seviyesine kümüleme ayrı bir alan olarak Gemini'den
+  istenmeyecek — Code tek alan olarak kalır (dosyada göründüğü tam haliyle).
+  Kümüleme Gemini'nin işi değil; aşağıdaki "GİZLİLİK / DERİNLİK SEÇİMİ"
+  bölümünde anlatıldığı gibi, SADECE Gemini'den dönen veri üzerinde,
+  backend'de yapılır.
+
+  Her seviyede birden fazla kardeş kod olabilir (örn. "100 01" altında
+  "100 01 01", "100 01 02" gibi birden çok alt hesap aynı anda bulunabilir
+  — tek dala değil, dallanarak çoğalabilir).
+
+  Üst kod, altındaki tüm alt kodların toplamıdır: çift taraflı kayıt
+  mantığında üst satır bağımsız bir hareket taşımaz, borcu da alacağı da
+  kendi alt kırılımlarının toplamına eşittir (ör. "100" = "100 01" + "100 02"
+  + ...; "100 01" = "100 01 01" + "100 01 02" + ...). Hem üst hem alt
+  satırlar birlikte verilmişse bu toplam tutmalı; tutmuyorsa eksik satır ya
+  da veri hatası olduğu anlamına gelir.
+
+
+GİZLİLİK / DERİNLİK SEÇİMİ (hesap kodu kümüleme kuralı)
+---------------------------------------------------------
+Sorun: mizanlarda alt kırılım seviyelerinde (ör. "102 01 01 001") gerçek
+üçüncü taraf isimleri olabilir (banka şube adı, müşteri/tedarikçi adı gibi —
+Desktop'taki örnek dosyada "120 Alıcılar" altında 1000+ gerçek şirket adı
+tespit edildi). Bu isimler değerleme için gerekli değil, sadece 3'lü (ana
+kod) seviyesindeki toplam gerekiyor.
+
+Dosya tipine göre iki farklı mekanizma uygulanacak:
+
+1) EXCEL — GİDEN veri temizlenir (Gemini'ye gitmeden önce), ama KÜMÜLEME
+   YAPILMAZ: backend, kod kolonunu okuyup en derin seviyedeki satırları
+   (ör. "102 01 01 XXX" gibi isim taşıyan en alt kırılım satırlarını) dosya
+   Gemini'ye gönderilmeden önce siler/çıkarır. Bu sadece bir TEMİZLEME
+   (satır çıkarma) adımıdır — toplama/kümüleme işlemi burada yapılmaz, bu
+   yüzden kod sütununu anlamak dışında bir "extraction" mantığı gerekmez,
+   Gemini'nin yerini almaz.
+
+2) PDF / taranmış dosyalar — giden veride yapacak bir şey yok: yapı
+   (hangi satır hangi derinlikte) Gemini okumadan bilinemez, bu yüzden
+   pre-filtreleme mümkün değil. İsimler bu dosya tipinde Gemini'nin
+   girdisine kaçınılmaz olarak girer.
+
+3) HER İKİ DOSYA TİPİNDE DE — TÜM KÜMÜLEME, Gemini'den DÖNEN veri üzerinde,
+   backend'de yapılır (extraction prompt'unda hâlâ "ne görürsen onu çıkar,
+   uydurma" kuralı geçerli — Gemini kendisi kümülemez, sadece ham satırları
+   döner). Her 3'lü kod için backend şu sırayla karar verir:
+     - "102" (3'lü kod) dönen veride var mı? Varsa onu doğrudan kullan,
+       altındaki hiçbir satırı hesaba katma.
+     - Yoksa "102 XX" seviyesindeki tüm kardeşleri bul ve toplayıp "102"yi
+       SEN oluştur.
+     - O da yoksa bir seviye daha in: "102 XX YY" kardeşlerini topla,
+       önce "102 XX"i, sonra "102"yi oluştur.
+     - Böyle en derine kadar devam eder (tepeden aşağı, sadece eksik olan
+       seviyeye inilir — her zaman en sığ/mevcut seviye tercih edilir).
+
+
+MODEL YAPISI
+------------
+Firma
+  └─ List<MizanYil>   (bir firmanın birden çok mizan yılı olabilir)
+       └─ List<MizanHesap>   (bir mizan yılının birden çok hesap satırı olabilir)
+
+Üç ayrı tablo, EF Core ilişkileriyle (foreign key + navigation koleksiyonu)
+birbirine bağlanır. Firma adı sadece Firma tablosunda bir kez tutulur.
+
+
+OLUŞTURULACAK MODELLER (Models/ValuatorPro/)
+---------------------------------------------
+
+1) Firma
+   - Id                Guid              (PK)
+   - Ad                string
+   - MizanYillar        List<MizanYil>    (navigation)
+
+2) MizanYil
+   - Id                Guid              (PK)
+   - FirmaId           Guid              (FK -> Firma.Id)
+   - Year               int
+   - Months             int               (12 = tam yıl, <12 = kısmi)
+   - IsPartial          bool
+   - FileDebitTotal     decimal?          (mizandaki "Genel Toplam" borç — mutabakat kontrolü için)
+   - FileCreditTotal    decimal?          (aynısı alacak için)
+   - Label              string?           (örn. "01/01/2025-31/12/2025 ARASI MİZAN")
+   - Status             enum              (Pending, Processing, Completed, Failed — Gemini işleminin takibi)
+   - MizanHesaplar      List<MizanHesap>  (navigation)
+   (Unique index: FirmaId + Year)
+
+3) MizanHesap
+   - Id              Guid    (PK)
+   - MizanYilId      Guid    (FK -> MizanYil.Id)
+   - Code            string  (örn. "100", "100 01", "100 01 01 001" — dosyada
+                              ne görünüyorsa aynen; üst/alt kod birlikte
+                              bulunmak zorunda değil)
+   - Name            string
+   - Debit           decimal
+   - Credit          decimal
+   - DebitBalance    decimal
+   - CreditBalance   decimal
+   (Unique index: MizanYilId + Code)
+
+(Opsiyonel — ileride aynı desenle genişletilebilir, şimdilik kapsam dışı:)
+   - AylıkRapor (FirmaId, Year, Month, Revenue, RevenueUsd, MaterialCost, Opex)
+
+NOT: Kur tablosu bu kapsama dahil değil — TCMB entegrasyonundan (ExchangeRate
+tablosu, ExchangeRateBackgroundService) zaten otomatik geliyor, Gemini/mizan
+extraction'ın bu veriyle bir ilgisi yok.
+
+
+BACKEND DEĞİŞİKLİKLERİ
+------------------------
+- DataContext'e DbSet<Firma>, DbSet<MizanYil>, DbSet<MizanHesap> eklenir + migration.
+- IGeminiService'e yeni metod: ExtractMizanAsync(byte[] fileBytes, string mimeType,
+  object targetSchema, object currentSnapshot) — generationConfig.responseSchema
+  olarak Firma/MizanYil/MizanHesap'ın nested (iç içe) şeklini, prompt içinde de
+  "sadece yeni dosyanın kapsadığı veriyi döndür, snapshot'taki veriyi tekrar
+  üretme" + "hesap kodu hiyerarşisi tam olmak zorunda değil" talimatlarını içerir.
+- Yeni controller/endpoint: POST /api/ValuatorPro/extract-mizan (dosya + firmaId
+  alır; firmaId yoksa yeni Firma açılır), GET /api/ValuatorPro/extract-mizan/{mizanYilId}
+  (polling — MizanYil.Status üzerinden).
+- Validasyon: dönen her yıl için Debit ≈ Credit toplamı kontrolü, tutmazsa
+  MizanYil.Status = Failed.
