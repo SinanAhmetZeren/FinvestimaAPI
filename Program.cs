@@ -78,7 +78,7 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailSender, EmailSender>();
-builder.Services.AddHttpClient<IGeminiService, GeminiService>();
+builder.Services.AddHttpClient<IGeminiService, GeminiService>(c => c.Timeout = TimeSpan.FromSeconds(240));
 builder.Services.AddHttpClient<IGeminiPrepService, GeminiPrepService>();
 builder.Services.AddHttpClient<ITcmbExchangeRateService, TcmbExchangeRateService>();
 builder.Services.AddHostedService<ExchangeRateBackgroundService>();

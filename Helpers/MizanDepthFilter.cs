@@ -3,23 +3,23 @@ using System.Text.RegularExpressions;
 
 namespace FinvestimaAPI.Helpers
 {
-    // Gemini'ye göndermeden önce, Excel'den çevrilmiş mizan metninden en derin hesap kırılımı
-    // satırlarını çıkarır (bunlar genelde banka şube adı / müşteri-tedarikçi adı gibi üçüncü
-    // taraf bilgisi taşır ve değerleme için gereksizdir — sadece 3'lü ana kod seviyesi gerekir).
-    // Sadece satır ÇIKARIR, hiçbir toplama/kümüleme yapmaz.
+    // Gemini'ye göndermeden önce, Excel'den çevrilmiş mizan metninden, hesap adı Tekdüzen Hesap
+    // Planı'nda (Resources/tekduzen-hesap-plani.txt) tanımlı bilinen bir isimle eşleşmeyen
+    // satırları çıkarır (bunlar genelde banka şube adı / müşteri-tedarikçi adı gibi üçüncü taraf
+    // bilgisi taşır). Derinlik önemli değil — 3 haneden fazla kodlu satırlar da (aggregation/
+    // kümüleme karşılaştırması için faydalı oldukları için) kalır, sadece isim bilinmiyorsa silinir.
     public static class MizanDepthFilter
     {
-        // Kod kolonu, veriye bakılarak bulunur: hücrelerin çoğu BAŞTAN SONA sadece rakam
-        // gruplarından ve aralarında tek bir ayraçtan (boşluk/nokta/tire) oluşuyorsa o kolon
-        // kod kolonudur. Virgül ya da başka karakter varsa (ör. "90231.19" tutar hücresi,
-        // "90.231,19" gibi virgüllü biçimler) eşleşmez — başlık metnine ya da ayraca
-        // bağımlı değil, ama tutar/isim hücreleriyle karışmaz.
-        private static readonly Regex CodeLikeCell = new(@"^\d{1,3}([ .\-]\d{1,3})*$");
+        // Kod kolonunu bulmak için geniş desen: 1-3 haneli ana kod, ardından boşlukla ayrılmış
+        // (harf içerebilen) alt gruplar — ör. "120 01 01 A005".
+        private static readonly Regex CodeLikeCell = new(@"^\d{1,3}( [A-Za-z0-9]{1,8})*$");
         private const double MinMatchRatio = 0.5;
 
-        // Kodun toplam rakam sayısı 3 (ana kod) + 2 + 2 = 7'den fazlaysa (4. gruba geçildiyse)
-        // satır silinir — ayraç ne olursa olsun (boşluk/nokta/hiçbiri) sadece rakamlar sayılır.
-        private const int MaxDigits = 7;
+        // İsim kolonunu bulmak için: en az iki ardışık harf içeren hücrelerin oranı en yüksek
+        // olan (kod kolonu hariç) kolon isim kolonudur.
+        private static readonly Regex HasLetters = new(@"[A-Za-zÇĞİÖŞÜçğıöşü]{2,}");
+
+        private static readonly Lazy<HashSet<string>> KnownNames = new(LoadKnownNames);
 
         public static string RemoveDeepestSubAccounts(string extractedText)
         {
@@ -62,18 +62,30 @@ namespace FinvestimaAPI.Helpers
                 return;
             }
 
+            int nameCol = FindNameColumn(rows, codeCol);
+
             for (int r = 0; r < rows.Count; r++)
             {
                 var cells = rows[r];
-                if (codeCol < cells.Length)
+                var hasCode = codeCol < cells.Length && cells[codeCol].Trim().Length > 0;
+                if (hasCode && nameCol >= 0 && nameCol < cells.Length)
                 {
-                    var code = cells[codeCol].Trim();
-                    var digitCount = code.Count(char.IsDigit);
-                    if (digitCount > 0 && digitCount > MaxDigits)
-                        continue; // en derin kırılım satırı — atla
+                    var name = cells[nameCol].Trim();
+                    if (name.Length > 0 && !IsKnownName(name))
+                        continue; // bilinmeyen isim (üçüncü taraf olabilir) — atla
                 }
                 sb.AppendLine(lines[start + r]);
             }
+        }
+
+        private static bool IsKnownName(string name)
+        {
+            var folded = Fold(name);
+            if (folded.Length == 0) return true; // boş isim, engelleme
+            foreach (var known in KnownNames.Value)
+                if (folded.Contains(known) || known.Contains(folded))
+                    return true;
+            return false;
         }
 
         private static int FindCodeColumn(List<string[]> rows)
@@ -86,10 +98,7 @@ namespace FinvestimaAPI.Helpers
             for (int c = 0; c < maxCols; c++)
             {
                 int total = 0, matches = 0;
-                bool hasHierarchy = false; // en az bir hücre birden fazla grup içeriyor mu
-                                            // (ör. "100 01") — "KOD UZUNLUK" gibi düz sayı
-                                            // kolonlarında bu asla olmaz, gerçek kod kolonunu
-                                            // ayırt etmemizi sağlar.
+                bool hasHierarchy = false;
                 foreach (var row in rows)
                 {
                     if (c >= row.Length) continue;
@@ -99,14 +108,13 @@ namespace FinvestimaAPI.Helpers
                     if (CodeLikeCell.IsMatch(v))
                     {
                         matches++;
-                        if (v.Any(ch => ch is ' ' or '.' or '-')) hasHierarchy = true;
+                        if (v.Contains(' ')) hasHierarchy = true;
                     }
                 }
                 if (total == 0) continue;
                 var ratio = (double)matches / total;
                 if (ratio < MinMatchRatio) continue;
 
-                // Hiyerarşi gösteren bir kolon varsa, onu göstermeyen hiçbir kolona tercih et.
                 var better = bestCol < 0
                     || (hasHierarchy && !bestHasHierarchy)
                     || (hasHierarchy == bestHasHierarchy && ratio > bestRatio);
@@ -119,6 +127,69 @@ namespace FinvestimaAPI.Helpers
             }
 
             return bestCol;
+        }
+
+        private static int FindNameColumn(List<string[]> rows, int codeCol)
+        {
+            int maxCols = rows.Count > 0 ? rows.Max(r => r.Length) : 0;
+            int bestCol = -1;
+            double bestRatio = 0;
+
+            for (int c = 0; c < maxCols; c++)
+            {
+                if (c == codeCol) continue;
+                int total = 0, matches = 0;
+                foreach (var row in rows)
+                {
+                    if (c >= row.Length) continue;
+                    var v = row[c].Trim();
+                    if (v.Length == 0) continue;
+                    total++;
+                    if (HasLetters.IsMatch(v)) matches++;
+                }
+                if (total == 0) continue;
+                var ratio = (double)matches / total;
+                if (ratio > bestRatio)
+                {
+                    bestRatio = ratio;
+                    bestCol = c;
+                }
+            }
+
+            return bestCol;
+        }
+
+        private static HashSet<string> LoadKnownNames()
+        {
+            var set = new HashSet<string>();
+            try
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, "Resources", "tekduzen-hesap-plani.txt");
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    var m = Regex.Match(line, @"^\d+\.\s*(.+)$");
+                    if (m.Success)
+                    {
+                        var folded = Fold(m.Groups[1].Value);
+                        if (folded.Length > 0) set.Add(folded);
+                    }
+                }
+            }
+            catch { /* referans okunamazsa boş liste — hiçbir satır eşleşmez, filtre hiçbir şeyi engellemez değil, her şeyi eler; kabul edilebilir güvenli taraf */ }
+            return set;
+        }
+
+        // Frontend'deki fold() ile aynı mantık: büyük harfe çevir, Türkçe karakterleri sadeleştir,
+        // alfanümerik olmayanları boşlukla değiştir, fazla boşlukları temizle.
+        private static string Fold(string s)
+        {
+            var upper = s.ToUpperInvariant()
+                .Replace('İ', 'I').Replace('Ş', 'S').Replace('Ğ', 'G')
+                .Replace('Ü', 'U').Replace('Ö', 'O').Replace('Ç', 'C');
+            var sb = new StringBuilder(upper.Length);
+            foreach (var ch in upper)
+                sb.Append(char.IsLetterOrDigit(ch) ? ch : ' ');
+            return Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
         }
     }
 }

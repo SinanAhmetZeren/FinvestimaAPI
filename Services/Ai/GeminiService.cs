@@ -152,6 +152,7 @@ namespace FinvestimaAPI.Services.Ai
         private async Task<string?> SendAsync(object requestBody)
         {
             var json = JsonSerializer.Serialize(requestBody);
+            Console.WriteLine($"[GeminiService] Request payload size: {json.Length} chars (~{json.Length/1024}KB)");
 
             foreach (var model in Models)
             {
@@ -172,15 +173,21 @@ namespace FinvestimaAPI.Services.Ai
 
                     var responseJson = await response.Content.ReadAsStringAsync();
                     Console.WriteLine($"[GeminiService] Model '{model}' responded successfully ({responseJson.Length} chars)");
+                    await SaveRawResponseAsync(model, responseJson);
                     using var doc = JsonDocument.Parse(responseJson);
 
                     if (doc.RootElement.TryGetProperty("candidates", out var candidates) &&
-                        candidates.GetArrayLength() > 0 &&
-                        candidates[0].TryGetProperty("content", out var candidateContent) &&
-                        candidateContent.TryGetProperty("parts", out var parts) &&
-                        parts.GetArrayLength() > 0)
+                        candidates.GetArrayLength() > 0)
                     {
-                        return parts[0].GetProperty("text").GetString();
+                        if (candidates[0].TryGetProperty("finishReason", out var fr))
+                            Console.WriteLine($"[GeminiService] finishReason: {fr.GetString()}");
+
+                        if (candidates[0].TryGetProperty("content", out var candidateContent) &&
+                            candidateContent.TryGetProperty("parts", out var parts) &&
+                            parts.GetArrayLength() > 0)
+                        {
+                            return parts[0].GetProperty("text").GetString();
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -190,6 +197,24 @@ namespace FinvestimaAPI.Services.Ai
             }
 
             return null;
+        }
+
+        // Gemini'den dönen ham cevabı (parse edilmeden önce) logs/gemini-responses altına yazar —
+        // parse hatası olduğunda terminale yapıştırmaya gerek kalmadan doğrudan dosyadan incelenir.
+        private static async Task SaveRawResponseAsync(string model, string responseJson)
+        {
+            try
+            {
+                var dir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "logs", "gemini-responses");
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, $"{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}-{model}.json");
+                await File.WriteAllTextAsync(path, responseJson);
+                Console.WriteLine($"[GeminiService] Raw response saved to {Path.GetFullPath(path)}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GeminiService] Failed to save raw response: {ex.Message}");
+            }
         }
     }
 }
