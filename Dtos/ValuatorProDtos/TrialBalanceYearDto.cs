@@ -1,6 +1,6 @@
 namespace FinvestimaAPI.Dtos.ValuatorProDtos
 {
-    public class MizanYilDto
+    public class TrialBalanceYearDto
     {
         public int Year { get; set; }
         public int Months { get; set; } = 12;
@@ -8,6 +8,6 @@ namespace FinvestimaAPI.Dtos.ValuatorProDtos
         public decimal? FileDebitTotal { get; set; }
         public decimal? FileCreditTotal { get; set; }
         public string? Label { get; set; }
-        public List<MizanHesapDto> MizanHesaplar { get; set; } = new();
+        public List<TrialBalanceAccountDto> TrialBalanceAccounts { get; set; } = new();
     }
 }

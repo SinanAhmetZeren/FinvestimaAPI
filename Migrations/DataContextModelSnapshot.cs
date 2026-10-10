@@ -191,29 +191,64 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("FinancialExtractionJobs");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.Firma", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.Company", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Ad")
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Companies");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("UserId")
+                    b.Property<decimal>("Credit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CreditBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Debit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("DebitBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid>("TrialBalanceYearId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
-                    b.ToTable("Firmalar");
+                    b.HasIndex("TrialBalanceYearId", "Code");
+
+                    b.ToTable("TrialBalanceAccounts");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanExtractionJob", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceExtractionJob", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -232,60 +267,23 @@ namespace FinvestimaAPI.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("FirmaId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("ResultJson")
                         .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
-                    b.HasKey("Id");
-
-                    b.HasIndex("FirmaId");
-
-                    b.ToTable("MizanExtractionJobs");
-                });
-
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanHesap", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("ValuationTaskId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("Credit")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("CreditBalance")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("Debit")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("DebitBalance")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("MizanYilId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MizanYilId", "Code")
-                        .IsUnique();
+                    b.HasIndex("ValuationTaskId");
 
-                    b.ToTable("MizanHesaplar");
+                    b.ToTable("TrialBalanceExtractionJobs");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanYil", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceYear", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -300,9 +298,6 @@ namespace FinvestimaAPI.Migrations
                     b.Property<decimal?>("FileDebitTotal")
                         .HasColumnType("numeric");
 
-                    b.Property<Guid>("FirmaId")
-                        .HasColumnType("uuid");
-
                     b.Property<bool>("IsPartial")
                         .HasColumnType("boolean");
 
@@ -315,15 +310,45 @@ namespace FinvestimaAPI.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Year")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FirmaId", "Year")
+                    b.HasIndex("ValuationTaskId", "Year")
                         .IsUnique();
 
-                    b.ToTable("MizanYillar");
+                    b.ToTable("TrialBalanceYears");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.ToTable("ValuationTasks");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -458,37 +483,48 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanExtractionJob", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceAccount", b =>
                 {
-                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.Firma", "Firma")
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.TrialBalanceYear", "TrialBalanceYear")
+                        .WithMany("TrialBalanceAccounts")
+                        .HasForeignKey("TrialBalanceYearId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrialBalanceYear");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceExtractionJob", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
                         .WithMany()
-                        .HasForeignKey("FirmaId")
+                        .HasForeignKey("ValuationTaskId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Firma");
+                    b.Navigation("ValuationTask");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanHesap", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceYear", b =>
                 {
-                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.MizanYil", "MizanYil")
-                        .WithMany("MizanHesaplar")
-                        .HasForeignKey("MizanYilId")
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithMany("TrialBalanceYears")
+                        .HasForeignKey("ValuationTaskId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("MizanYil");
+                    b.Navigation("ValuationTask");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanYil", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationTask", b =>
                 {
-                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.Firma", "Firma")
-                        .WithMany("MizanYillar")
-                        .HasForeignKey("FirmaId")
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.Company", "Company")
+                        .WithMany("ValuationTasks")
+                        .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Firma");
+                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -542,14 +578,19 @@ namespace FinvestimaAPI.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.Firma", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.Company", b =>
                 {
-                    b.Navigation("MizanYillar");
+                    b.Navigation("ValuationTasks");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MizanYil", b =>
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceYear", b =>
                 {
-                    b.Navigation("MizanHesaplar");
+                    b.Navigation("TrialBalanceAccounts");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationTask", b =>
+                {
+                    b.Navigation("TrialBalanceYears");
                 });
 #pragma warning restore 612, 618
         }

@@ -11,10 +11,11 @@ namespace FinvestimaAPI.Data
 
         public DbSet<FinancialExtractionJob> FinancialExtractionJobs { get; set; }
         public DbSet<ExchangeRate> ExchangeRates { get; set; }
-        public DbSet<Firma> Firmalar { get; set; }
-        public DbSet<MizanYil> MizanYillar { get; set; }
-        public DbSet<MizanHesap> MizanHesaplar { get; set; }
-        public DbSet<MizanExtractionJob> MizanExtractionJobs { get; set; }
+        public DbSet<Company> Companies { get; set; }
+        public DbSet<ValuationTask> ValuationTasks { get; set; }
+        public DbSet<TrialBalanceYear> TrialBalanceYears { get; set; }
+        public DbSet<TrialBalanceAccount> TrialBalanceAccounts { get; set; }
+        public DbSet<TrialBalanceExtractionJob> TrialBalanceExtractionJobs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -28,30 +29,38 @@ namespace FinvestimaAPI.Data
                 .HasIndex(r => r.Date)
                 .IsUnique();
 
-            modelBuilder.Entity<Firma>()
-                .HasMany(f => f.MizanYillar)
-                .WithOne(m => m.Firma)
-                .HasForeignKey(m => m.FirmaId)
+            modelBuilder.Entity<Company>()
+                .HasMany(c => c.ValuationTasks)
+                .WithOne(t => t.Company)
+                .HasForeignKey(t => t.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<MizanYil>()
-                .HasIndex(m => new { m.FirmaId, m.Year })
-                .IsUnique();
-
-            modelBuilder.Entity<MizanYil>()
-                .HasMany(m => m.MizanHesaplar)
-                .WithOne(h => h.MizanYil)
-                .HasForeignKey(h => h.MizanYilId)
+            modelBuilder.Entity<ValuationTask>()
+                .HasMany(t => t.TrialBalanceYears)
+                .WithOne(y => y.ValuationTask)
+                .HasForeignKey(y => y.ValuationTaskId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<MizanHesap>()
-                .HasIndex(h => new { h.MizanYilId, h.Code })
+            modelBuilder.Entity<TrialBalanceYear>()
+                .HasIndex(y => new { y.ValuationTaskId, y.Year })
                 .IsUnique();
 
-            modelBuilder.Entity<MizanExtractionJob>()
-                .HasOne(j => j.Firma)
+            modelBuilder.Entity<TrialBalanceYear>()
+                .HasMany(y => y.TrialBalanceAccounts)
+                .WithOne(a => a.TrialBalanceYear)
+                .HasForeignKey(a => a.TrialBalanceYearId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NOT unique on (TrialBalanceYearId, Code): re-uploads add new rows for the same
+            // code instead of overwriting (see TrialBalanceAccount.CreatedAt) — version
+            // resolution happens at read time, not via a DB constraint.
+            modelBuilder.Entity<TrialBalanceAccount>()
+                .HasIndex(a => new { a.TrialBalanceYearId, a.Code });
+
+            modelBuilder.Entity<TrialBalanceExtractionJob>()
+                .HasOne(j => j.ValuationTask)
                 .WithMany()
-                .HasForeignKey(j => j.FirmaId)
+                .HasForeignKey(j => j.ValuationTaskId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
     }

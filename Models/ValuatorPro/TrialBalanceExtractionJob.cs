@@ -1,14 +1,11 @@
 namespace FinvestimaAPI.Models.ValuatorPro
 {
-    // Tek bir dosya yüklemesinin Gemini işleminin takibi (polling) için.
-    // Hangi yıl(lar)ı kapsadığı Gemini cevap verene kadar bilinmediğinden
-    // MizanYil'e değil, doğrudan Firma'ya bağlanır.
-    public class MizanExtractionJob
+    // Tracks a single file upload's Gemini extraction (async job + polling) for a ValuationTask.
+    public class TrialBalanceExtractionJob
     {
         public Guid Id { get; set; }
-        public Guid FirmaId { get; set; }
-        public Firma? Firma { get; set; }
-
+        public Guid ValuationTaskId { get; set; }
+        public ValuationTask? ValuationTask { get; set; }
         public string FileName { get; set; } = string.Empty;
         public ExtractionJobStatus Status { get; set; } = ExtractionJobStatus.Pending;
         public string? ErrorMessage { get; set; }

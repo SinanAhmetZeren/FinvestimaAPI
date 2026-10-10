@@ -17,22 +17,24 @@ namespace FinvestimaAPI.Controllers
     [Route("api/[controller]")]
     public class ValuatorProController : ControllerBase
     {
-        private readonly IMizanExtractionService _mizanExtractionService;
+        private readonly ITrialBalanceExtractionService _trialBalanceExtractionService;
         private readonly DataContext _context;
         private readonly ILogger<ValuatorProController> _logger;
 
-        public ValuatorProController(IMizanExtractionService mizanExtractionService, DataContext context, ILogger<ValuatorProController> logger)
+        public ValuatorProController(ITrialBalanceExtractionService trialBalanceExtractionService, DataContext context, ILogger<ValuatorProController> logger)
         {
-            _mizanExtractionService = mizanExtractionService;
+            _trialBalanceExtractionService = trialBalanceExtractionService;
             _context = context;
             _logger = logger;
         }
 
-        // Dosyayı alır, bir MizanExtractionJob açar ve hemen jobId döner. Gemini çağrısı ve DB
-        // yazımı arka planda (MizanExtractionService) yapılır.
-        [HttpPost("mizan-yukle")]
+        // Dosyayı alır, bir TrialBalanceExtractionJob açar ve hemen jobId döner. Gemini çağrısı
+        // ve DB yazımı arka planda (TrialBalanceExtractionService) yapılır.
+        // valuationTaskId verilirse o işe yüklenir; verilmezse companyId (+ yeni bir task) ya da
+        // companyName (+ yeni company + yeni task) ile yeni bir ValuationTask açılır.
+        [HttpPost("upload-trial-balance")]
         [RequestSizeLimit(20_000_000)]
-        public async Task<IActionResult> MizanYukle(IFormFile file, [FromForm] Guid? firmaId, [FromForm] string? firmaAdi)
+        public async Task<IActionResult> UploadTrialBalance(IFormFile file, [FromForm] Guid? valuationTaskId, [FromForm] Guid? companyId, [FromForm] string? companyName, [FromForm] string? taskTitle)
         {
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
@@ -41,17 +43,30 @@ namespace FinvestimaAPI.Controllers
             if (userId == null)
                 return Unauthorized();
 
-            var firma = firmaId.HasValue
-                ? await _context.Firmalar.FirstOrDefaultAsync(f => f.Id == firmaId.Value && f.UserId == userId)
+            ValuationTask? task = valuationTaskId.HasValue
+                ? await _context.ValuationTasks.FirstOrDefaultAsync(t => t.Id == valuationTaskId.Value)
                 : null;
 
-            if (firmaId.HasValue && firma == null)
-                return NotFound("Firma bulunamadı.");
+            if (valuationTaskId.HasValue && task == null)
+                return NotFound("ValuationTask bulunamadı.");
 
-            if (firma == null)
+            if (task == null)
             {
-                firma = new Firma { Id = Guid.NewGuid(), Ad = firmaAdi ?? "Yeni Firma", UserId = userId };
-                _context.Firmalar.Add(firma);
+                var company = companyId.HasValue
+                    ? await _context.Companies.FirstOrDefaultAsync(c => c.Id == companyId.Value)
+                    : null;
+
+                if (companyId.HasValue && company == null)
+                    return NotFound("Company bulunamadı.");
+
+                if (company == null)
+                {
+                    company = new Company { Id = Guid.NewGuid(), Name = companyName ?? "Yeni Firma" };
+                    _context.Companies.Add(company);
+                }
+
+                task = new ValuationTask { Id = Guid.NewGuid(), CompanyId = company.Id, Title = taskTitle ?? "Değerleme", UserId = userId };
+                _context.ValuationTasks.Add(task);
             }
 
             var fileName = file.FileName;
@@ -80,21 +95,19 @@ namespace FinvestimaAPI.Controllers
                 mimeType = fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ? "text/csv" : "application/pdf";
             }
 
-            var job = new MizanExtractionJob { Id = Guid.NewGuid(), FirmaId = firma.Id, FileName = fileName, Status = ExtractionJobStatus.Pending };
-            _context.MizanExtractionJobs.Add(job);
+            var job = new TrialBalanceExtractionJob { Id = Guid.NewGuid(), ValuationTaskId = task.Id, FileName = fileName, Status = ExtractionJobStatus.Pending };
+            _context.TrialBalanceExtractionJobs.Add(job);
             await _context.SaveChangesAsync();
 
-            _ = Task.Run(() => _mizanExtractionService.ProcessJobAsync(job.Id, firma.Id, bytes, mimeType));
+            _ = Task.Run(() => _trialBalanceExtractionService.ProcessJobAsync(job.Id, task.Id, bytes, mimeType));
 
-            return Accepted(new { jobId = job.Id, firmaId = firma.Id });
+            return Accepted(new { jobId = job.Id, valuationTaskId = task.Id });
         }
 
-        [HttpGet("mizan-sorgula/{jobId}")]
-        public async Task<IActionResult> MizanSorgula(Guid jobId)
+        [HttpGet("upload-trial-balance/{jobId}")]
+        public async Task<IActionResult> GetUploadJob(Guid jobId)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var job = await _context.MizanExtractionJobs.Include(j => j.Firma)
-                .FirstOrDefaultAsync(j => j.Id == jobId && j.Firma!.UserId == userId);
+            var job = await _context.TrialBalanceExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
 
             if (job == null)
                 return NotFound();
@@ -102,42 +115,44 @@ namespace FinvestimaAPI.Controllers
             return Ok(new
             {
                 jobId = job.Id,
-                firmaId = job.FirmaId,
+                valuationTaskId = job.ValuationTaskId,
                 status = job.Status.ToString(),
                 errorMessage = job.ErrorMessage,
                 result = job.ResultJson != null ? JsonSerializer.Deserialize<JsonElement>(job.ResultJson) : (JsonElement?)null,
             });
         }
 
-        [HttpGet("firmabilgileri/{firmaId}")]
-        public async Task<IActionResult> FirmaBilgileri(Guid firmaId)
+        [HttpGet("valuation-tasks/{valuationTaskId}")]
+        public async Task<IActionResult> GetValuationTask(Guid valuationTaskId)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var firma = await _context.Firmalar
-                .Include(f => f.MizanYillar).ThenInclude(y => y.MizanHesaplar)
-                .FirstOrDefaultAsync(f => f.Id == firmaId && f.UserId == userId);
+            var task = await _context.ValuationTasks
+                .Include(t => t.Company)
+                .Include(t => t.TrialBalanceYears).ThenInclude(y => y.TrialBalanceAccounts)
+                .FirstOrDefaultAsync(t => t.Id == valuationTaskId);
 
-            if (firma == null)
+            if (task == null)
                 return NotFound();
 
             return Ok(new
             {
-                firma.Id,
-                firma.Ad,
-                years = firma.MizanYillar.Select(y =>
+                task.Id,
+                task.Title,
+                companyId = task.CompanyId,
+                companyName = task.Company?.Name,
+                years = task.TrialBalanceYears.Select(y =>
                 {
-                    // DB'de ham (her derinlikteki) satırlar duruyor; 3'lü seviyeye kümüleme ve
-                    // mismatch kontrolü burada, okuma anında, veriyi değiştirmeden yapılır.
-                    var raw = y.MizanHesaplar.Select(h => new MizanHesapDto
-                    {
-                        Code = h.Code,
-                        Name = h.Name,
-                        Debit = h.Debit,
-                        Credit = h.Credit,
-                        DebitBalance = h.DebitBalance,
-                        CreditBalance = h.CreditBalance,
-                    }).ToList();
-                    var aggregated = MizanDepthAggregator.Aggregate(raw);
+                    // DB'de ham (her derinlikteki, her yüklemeden) satırlar duruyor. Okuma anında:
+                    // 1) koda göre en güncel versiyon seçilir (eski yüklemelerin üzerine yazılmaz,
+                    //    sadece hangisi gösterileceğine burada karar verilir),
+                    // 2) 3'lü seviyeye kümülenir ve derinlik mismatch kontrolü yapılır.
+                    var resolved = TrialBalanceVersionResolver.ResolveLatest(y.TrialBalanceAccounts);
+                    var conflictRoots = resolved.Where(r => r.HasMultipleVersions)
+                        .Select(r => r.Row.Code.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0])
+                        .ToHashSet();
+
+                    var aggregated = TrialBalanceDepthAggregator.Aggregate(resolved.Select(r => r.Row).ToList());
+                    foreach (var a in aggregated)
+                        if (conflictRoots.Contains(a.Code)) a.VersionConflict = true;
 
                     return new
                     {
@@ -146,7 +161,7 @@ namespace FinvestimaAPI.Controllers
                         y.IsPartial,
                         Status = y.Status.ToString(),
                         y.ErrorMessage,
-                        accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch }),
+                        accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict }),
                     };
                 }),
             });

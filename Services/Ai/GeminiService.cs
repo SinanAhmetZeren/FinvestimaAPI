@@ -25,16 +25,15 @@ namespace FinvestimaAPI.Services.Ai
             "text/csv", "text/plain", "application/csv", "application/vnd.ms-excel"
         };
 
-        private static readonly string[] MizanModelPaths =
+        private static readonly string[] TrialBalanceModelPaths =
         {
-            Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "Firma.cs"),
-            Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "MizanYil.cs"),
-            Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "MizanHesap.cs"),
+            Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "TrialBalanceYear.cs"),
+            Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "TrialBalanceAccount.cs"),
         };
 
-        private const string MizanExtractionPrompt =
+        private const string TrialBalanceExtractionPrompt =
             "You are extracting mizan (Turkish trial balance) rows from the REAL document below into " +
-            "the C# model shapes shown above (Firma/MizanYil/MizanHesap). Rules:\n\n" +
+            "the C# model shapes shown above (TrialBalanceYear/TrialBalanceAccount). Rules:\n\n" +
             "1. A parent account code (e.g. \"100\") does not have to appear together with its sub-codes " +
             "(e.g. \"100 01\", \"100 01 01 001\"). Either may appear alone, depending on how the mizan was " +
             "exported. Do NOT assume the hierarchy is complete and do NOT fabricate a missing parent or " +
@@ -63,15 +62,15 @@ namespace FinvestimaAPI.Services.Ai
             _logger = logger;
         }
 
-        public async Task<MizanExtractionResultDto?> ExtractMizanAsync(byte[] fileBytes, string mimeType, MizanExtractionResultDto? currentSnapshot)
+        public async Task<TrialBalanceExtractionResultDto?> ExtractTrialBalanceAsync(byte[] fileBytes, string mimeType, TrialBalanceExtractionResultDto? currentSnapshot)
         {
             var parts = new List<object>
             {
                 new { text = "Tekdüzen Hesap Planı (chart of accounts) reference:\n" + await File.ReadAllTextAsync(TekduzenReferencePath) },
-                new { text = "Target C# model shapes (Firma/MizanYil/MizanHesap):\n\n" + string.Join("\n\n", MizanModelPaths.Select(p => File.Exists(p) ? File.ReadAllText(p) : string.Empty)) },
+                new { text = "Target C# model shapes (TrialBalanceYear/TrialBalanceAccount):\n\n" + string.Join("\n\n", TrialBalanceModelPaths.Select(p => File.Exists(p) ? File.ReadAllText(p) : string.Empty)) },
             };
 
-            if (currentSnapshot != null && currentSnapshot.MizanYillar.Count > 0)
+            if (currentSnapshot != null && currentSnapshot.TrialBalanceYears.Count > 0)
             {
                 parts.Add(new { text = "Current snapshot already on file (context only, do not repeat):\n" + JsonSerializer.Serialize(currentSnapshot) });
             }
@@ -80,7 +79,7 @@ namespace FinvestimaAPI.Services.Ai
             parts.Add(TextMimeTypes.Contains(mimeType)
                 ? new { text = "```csv\n" + Encoding.UTF8.GetString(fileBytes) + "\n```" }
                 : (object)new { inline_data = new { mime_type = mimeType, data = Convert.ToBase64String(fileBytes) } });
-            parts.Add(new { text = MizanExtractionPrompt });
+            parts.Add(new { text = TrialBalanceExtractionPrompt });
 
             var requestBody = new
             {
@@ -93,7 +92,7 @@ namespace FinvestimaAPI.Services.Ai
                         type = "OBJECT",
                         properties = new
                         {
-                            mizanYillar = new
+                            trialBalanceYears = new
                             {
                                 type = "ARRAY",
                                 items = new
@@ -107,7 +106,7 @@ namespace FinvestimaAPI.Services.Ai
                                         fileDebitTotal = new { type = "NUMBER", nullable = true },
                                         fileCreditTotal = new { type = "NUMBER", nullable = true },
                                         label = new { type = "STRING", nullable = true },
-                                        mizanHesaplar = new
+                                        trialBalanceAccounts = new
                                         {
                                             type = "ARRAY",
                                             items = new
@@ -126,11 +125,11 @@ namespace FinvestimaAPI.Services.Ai
                                             }
                                         }
                                     },
-                                    required = new[] { "year", "months", "isPartial", "mizanHesaplar" }
+                                    required = new[] { "year", "months", "isPartial", "trialBalanceAccounts" }
                                 }
                             }
                         },
-                        required = new[] { "mizanYillar" }
+                        required = new[] { "trialBalanceYears" }
                     }
                 }
             };
@@ -141,11 +140,11 @@ namespace FinvestimaAPI.Services.Ai
 
             try
             {
-                return JsonSerializer.Deserialize<MizanExtractionResultDto>(text, CaseInsensitiveOptions);
+                return JsonSerializer.Deserialize<TrialBalanceExtractionResultDto>(text, CaseInsensitiveOptions);
             }
             catch (JsonException ex)
             {
-                _logger.LogError(ex, "Failed to parse Gemini mizan extraction response: {Text}", text);
+                _logger.LogError(ex, "Failed to parse Gemini trial balance extraction response: {Text}", text);
                 return null;
             }
         }

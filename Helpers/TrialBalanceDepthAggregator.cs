@@ -1,8 +1,8 @@
 using FinvestimaAPI.Dtos.ValuatorProDtos;
 
-namespace FinvestimaAPI.Services.ValuatorPro
+namespace FinvestimaAPI.Helpers
 {
-    public class AggregatedMizanHesap
+    public class AggregatedTrialBalanceAccount
     {
         public string Code { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
@@ -11,6 +11,10 @@ namespace FinvestimaAPI.Services.ValuatorPro
         public decimal DebitBalance { get; set; }
         public decimal CreditBalance { get; set; }
         public bool DepthMismatch { get; set; }
+
+        // True when a code under this root has multiple versions (from different uploads —
+        // see TrialBalanceVersionResolver). Set by the caller, not by Aggregate itself.
+        public bool VersionConflict { get; set; }
     }
 
     // Gemini'den dönen ham mizan satırları birden fazla derinlikte (102, 102 01, 102 01 01 ...)
@@ -18,14 +22,14 @@ namespace FinvestimaAPI.Services.ValuatorPro
     // üretir, adayları birbirleriyle karşılaştırır ve en az derinlikteki değeri nihai sonuç olarak
     // kullanır. Tutmuyorsa DepthMismatch=true işaretlenir. Sonuç SADECE 3'lü (kök) seviyede döner —
     // alt derinlikler DB'ye/UI'a hiç yansımaz.
-    public static class MizanDepthAggregator
+    public static class TrialBalanceDepthAggregator
     {
         private const decimal ToleranceAbsolute = 1m;
         private const decimal ToleranceRelative = 0.0005m;
 
-        public static List<AggregatedMizanHesap> Aggregate(List<MizanHesapDto> rawRows)
+        public static List<AggregatedTrialBalanceAccount> Aggregate(List<TrialBalanceAccountDto> rawRows)
         {
-            var byRoot = new Dictionary<string, List<(int Depth, MizanHesapDto Row)>>();
+            var byRoot = new Dictionary<string, List<(int Depth, TrialBalanceAccountDto Row)>>();
 
             foreach (var row in rawRows)
             {
@@ -39,7 +43,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
                 list.Add((depth, row));
             }
 
-            var result = new List<AggregatedMizanHesap>();
+            var result = new List<AggregatedTrialBalanceAccount>();
 
             foreach (var (root, rows) in byRoot)
             {
@@ -62,7 +66,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
                     !WithinTolerance(c.Debit, chosen.Debit) ||
                     !WithinTolerance(c.Credit, chosen.Credit));
 
-                result.Add(new AggregatedMizanHesap
+                result.Add(new AggregatedTrialBalanceAccount
                 {
                     Code = root,
                     Name = chosen.Name,

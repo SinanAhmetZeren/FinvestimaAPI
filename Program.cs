@@ -82,7 +82,7 @@ builder.Services.AddHttpClient<IGeminiService, GeminiService>();
 builder.Services.AddHttpClient<IGeminiPrepService, GeminiPrepService>();
 builder.Services.AddHttpClient<ITcmbExchangeRateService, TcmbExchangeRateService>();
 builder.Services.AddHostedService<ExchangeRateBackgroundService>();
-builder.Services.AddScoped<FinvestimaAPI.Services.ValuatorPro.IMizanExtractionService, FinvestimaAPI.Services.ValuatorPro.MizanExtractionService>();
+builder.Services.AddScoped<FinvestimaAPI.Services.ValuatorPro.ITrialBalanceExtractionService, FinvestimaAPI.Services.ValuatorPro.TrialBalanceExtractionService>();
 
 builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
 {
