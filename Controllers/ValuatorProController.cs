@@ -139,10 +139,14 @@ namespace FinvestimaAPI.Controllers
         [HttpPost("trial-balance-accounts/manual-edit")]
         public async Task<IActionResult> ManualEdit([FromBody] ManualEditRequest req)
         {
+            _logger.LogWarning("[ManualEdit] received valuationTaskId={ValuationTaskId} year={Year} code={Code}", req.ValuationTaskId, req.Year, req.Code);
             var year = await _context.TrialBalanceYears
                 .FirstOrDefaultAsync(y => y.ValuationTaskId == req.ValuationTaskId && y.Year == req.Year);
             if (year == null)
+            {
+                _logger.LogWarning("[ManualEdit] no TrialBalanceYear found for valuationTaskId={ValuationTaskId} year={Year}", req.ValuationTaskId, req.Year);
                 return NotFound("TrialBalanceYear bulunamadı.");
+            }
 
             var net = req.Debit - req.Credit;
             var row = new TrialBalanceAccount
