@@ -138,6 +138,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
                     db.TrialBalanceAccounts.Add(new TrialBalanceAccount
                     {
                         Id = Guid.NewGuid(),
+                        ValuationTaskId = valuationTaskId,
                         TrialBalanceYearId = existing.Id,
                         Code = h.Code,
                         Name = h.Name,

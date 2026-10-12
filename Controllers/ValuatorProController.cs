@@ -34,7 +34,7 @@ namespace FinvestimaAPI.Controllers
         // companyName (+ yeni company + yeni task) ile yeni bir ValuationTask açılır.
         [HttpPost("upload-trial-balance")]
         [RequestSizeLimit(20_000_000)]
-        public async Task<IActionResult> UploadTrialBalance(IFormFile file, [FromForm] Guid? valuationTaskId, [FromForm] Guid? companyId, [FromForm] string? companyName, [FromForm] string? taskTitle)
+        public async Task<IActionResult> UploadTrialBalance(IFormFile file, [FromForm] Guid? valuationTaskId, [FromForm] Guid? companyId, [FromForm] string? companyName, [FromForm] string? taskTitle, [FromForm] int? maxCodeDigits)
         {
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
@@ -80,7 +80,7 @@ namespace FinvestimaAPI.Controllers
                 try
                 {
                     var text = ExcelTextExtractor.ExtractAsText(bytes, fileName);
-                    text = MizanDepthFilter.RemoveDeepestSubAccounts(text);
+                    text = MizanDepthFilter.RemoveDeepestSubAccounts(text, maxCodeDigits ?? 7);
                     bytes = System.Text.Encoding.UTF8.GetBytes(text);
                     mimeType = "text/csv";
                 }
@@ -122,6 +122,49 @@ namespace FinvestimaAPI.Controllers
             });
         }
 
+        public class ManualEditRequest
+        {
+            public Guid ValuationTaskId { get; set; }
+            public int Year { get; set; }
+            public string Code { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public decimal Debit { get; set; }
+            public decimal Credit { get; set; }
+        }
+
+        // Kullanıcının mizan ızgarasında elle düzelttiği bir hesabı yeni bir satır olarak ekler —
+        // eski satırların üzerine yazmaz, tıpkı yeniden yükleme gibi (bkz. TrialBalanceAccount.CreatedAt).
+        // En son CreatedAt kazandığı için bu satır otomatik güncel sayılır; sonraki bir dosya
+        // yüklemesi bunu bilerek ezebilir (kilitli değil).
+        [HttpPost("trial-balance-accounts/manual-edit")]
+        public async Task<IActionResult> ManualEdit([FromBody] ManualEditRequest req)
+        {
+            var year = await _context.TrialBalanceYears
+                .FirstOrDefaultAsync(y => y.ValuationTaskId == req.ValuationTaskId && y.Year == req.Year);
+            if (year == null)
+                return NotFound("TrialBalanceYear bulunamadı.");
+
+            var net = req.Debit - req.Credit;
+            var row = new TrialBalanceAccount
+            {
+                Id = Guid.NewGuid(),
+                ValuationTaskId = req.ValuationTaskId,
+                TrialBalanceYearId = year.Id,
+                Code = req.Code,
+                Name = req.Name,
+                Debit = req.Debit,
+                Credit = req.Credit,
+                DebitBalance = Math.Max(net, 0),
+                CreditBalance = Math.Max(-net, 0),
+                IsManualOverride = true,
+                CreatedAt = DateTime.UtcNow,
+            };
+            _context.TrialBalanceAccounts.Add(row);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { row.Id, row.CreatedAt });
+        }
+
         [HttpGet("valuation-tasks/{valuationTaskId}")]
         public async Task<IActionResult> GetValuationTask(Guid valuationTaskId)
         {
@@ -161,7 +204,7 @@ namespace FinvestimaAPI.Controllers
                         y.IsPartial,
                         Status = y.Status.ToString(),
                         y.ErrorMessage,
-                        accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict }),
+                        accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict, a.IsManualOverride }),
                     };
                 }),
             });

@@ -57,6 +57,14 @@ namespace FinvestimaAPI.Data
             modelBuilder.Entity<TrialBalanceAccount>()
                 .HasIndex(a => new { a.TrialBalanceYearId, a.Code });
 
+            // Denormalized convenience FK — actual cascade delete happens via TrialBalanceYearId
+            // above, so this one is Restrict to avoid EF Core's multiple-cascade-path error.
+            modelBuilder.Entity<TrialBalanceAccount>()
+                .HasOne(a => a.ValuationTask)
+                .WithMany()
+                .HasForeignKey(a => a.ValuationTaskId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<TrialBalanceExtractionJob>()
                 .HasOne(j => j.ValuationTask)
                 .WithMany()

@@ -234,6 +234,9 @@ namespace FinvestimaAPI.Migrations
                     b.Property<decimal>("DebitBalance")
                         .HasColumnType("numeric");
 
+                    b.Property<bool>("IsManualOverride")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -241,7 +244,12 @@ namespace FinvestimaAPI.Migrations
                     b.Property<Guid>("TrialBalanceYearId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ValuationTaskId");
 
                     b.HasIndex("TrialBalanceYearId", "Code");
 
@@ -491,7 +499,15 @@ namespace FinvestimaAPI.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithMany()
+                        .HasForeignKey("ValuationTaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("TrialBalanceYear");
+
+                    b.Navigation("ValuationTask");
                 });
 
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceExtractionJob", b =>

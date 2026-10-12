@@ -11,6 +11,7 @@ namespace FinvestimaAPI.Helpers
         public decimal DebitBalance { get; set; }
         public decimal CreditBalance { get; set; }
         public bool DepthMismatch { get; set; }
+        public bool IsManualOverride { get; set; }
 
         // True when a code under this root has multiple versions (from different uploads —
         // see TrialBalanceVersionResolver). Set by the caller, not by Aggregate itself.
@@ -58,6 +59,7 @@ namespace FinvestimaAPI.Helpers
                         DebitBalance = g.Sum(x => x.Row.DebitBalance),
                         CreditBalance = g.Sum(x => x.Row.CreditBalance),
                         Name = g.First().Row.Name,
+                        IsManualOverride = g.Any(x => x.Row.IsManualOverride),
                     })
                     .ToList();
 
@@ -75,6 +77,7 @@ namespace FinvestimaAPI.Helpers
                     DebitBalance = chosen.DebitBalance,
                     CreditBalance = chosen.CreditBalance,
                     DepthMismatch = mismatch,
+                    IsManualOverride = chosen.IsManualOverride,
                 });
             }
 

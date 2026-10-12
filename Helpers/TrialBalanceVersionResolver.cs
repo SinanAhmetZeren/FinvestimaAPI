@@ -34,6 +34,7 @@ namespace FinvestimaAPI.Helpers
                             Credit = latest.Credit,
                             DebitBalance = latest.DebitBalance,
                             CreditBalance = latest.CreditBalance,
+                            IsManualOverride = latest.IsManualOverride,
                         },
                         HasMultipleVersions = distinctTimestamps > 1,
                     };

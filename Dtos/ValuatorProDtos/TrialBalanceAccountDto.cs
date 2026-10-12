@@ -8,5 +8,6 @@ namespace FinvestimaAPI.Dtos.ValuatorProDtos
         public decimal Credit { get; set; }
         public decimal DebitBalance { get; set; }
         public decimal CreditBalance { get; set; }
+        public bool IsManualOverride { get; set; }
     }
 }
