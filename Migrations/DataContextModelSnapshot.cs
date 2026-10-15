@@ -169,6 +169,76 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("Companies");
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsRemoved")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ValuationTaskId")
+                        .IsUnique();
+
+                    b.ToTable("MonthlySalesObjects");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsManualOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("MaterialCost")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MonthlySalesObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Opex")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Revenue")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MonthlySalesObjectId", "Year", "Month");
+
+                    b.ToTable("MonthlySalesRows");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -466,6 +536,28 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithOne("MonthlySalesObject")
+                        .HasForeignKey("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", "ValuationTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ValuationTask");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesRow", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", "MonthlySalesObject")
+                        .WithMany("MonthlySalesRows")
+                        .HasForeignKey("MonthlySalesObjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MonthlySalesObject");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceAccount", b =>
                 {
                     b.HasOne("FinvestimaAPI.Models.ValuatorPro.TrialBalanceYear", "TrialBalanceYear")
@@ -573,6 +665,11 @@ namespace FinvestimaAPI.Migrations
                     b.Navigation("ValuationTasks");
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>
+                {
+                    b.Navigation("MonthlySalesRows");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.TrialBalanceYear", b =>
                 {
                     b.Navigation("TrialBalanceAccounts");
@@ -580,6 +677,8 @@ namespace FinvestimaAPI.Migrations
 
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationTask", b =>
                 {
+                    b.Navigation("MonthlySalesObject");
+
                     b.Navigation("TrialBalanceYears");
                 });
 #pragma warning restore 612, 618

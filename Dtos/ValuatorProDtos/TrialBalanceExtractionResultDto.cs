@@ -5,5 +5,6 @@ namespace FinvestimaAPI.Dtos.ValuatorProDtos
     public class TrialBalanceExtractionResultDto
     {
         public List<TrialBalanceYearDto> TrialBalanceYears { get; set; } = new();
+        public List<MonthlySalesRowDto> MonthlySalesRows { get; set; } = new();
     }
 }

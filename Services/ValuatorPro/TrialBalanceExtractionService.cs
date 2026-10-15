@@ -45,16 +45,20 @@ namespace FinvestimaAPI.Services.ValuatorPro
                 TrialBalanceExtractionResultDto? snapshot = null;
 
                 var result = await geminiService.ExtractTrialBalanceAsync(fileBytes, mimeType, snapshot);
-                if (result == null || result.TrialBalanceYears.Count == 0)
+                if (result == null || (result.TrialBalanceYears.Count == 0 && result.MonthlySalesRows.Count == 0))
                 {
                     job.Status = ExtractionJobStatus.Failed;
-                    job.ErrorMessage = "Gemini did not return any recognizable trial balance data.";
+                    job.ErrorMessage = "Gemini did not return any recognizable trial balance or monthly sales data.";
                 }
                 else
                 {
-                    var writtenYears = await WriteYearsAsync(db, valuationTaskId, result, job.FileName);
+                    var writtenYears = result.TrialBalanceYears.Count > 0
+                        ? await WriteYearsAsync(db, valuationTaskId, result, job.FileName)
+                        : new List<object>();
+                    if (result.MonthlySalesRows.Count > 0)
+                        await WriteMonthlySalesAsync(db, valuationTaskId, result.MonthlySalesRows, job.FileName);
                     job.Status = ExtractionJobStatus.Completed;
-                    job.ResultJson = JsonSerializer.Serialize(new { years = writtenYears });
+                    job.ResultJson = JsonSerializer.Serialize(new { years = writtenYears, monthlySalesRowCount = result.MonthlySalesRows.Count });
                 }
 
                 job.CompletedAt = DateTime.UtcNow;
@@ -168,6 +172,41 @@ namespace FinvestimaAPI.Services.ValuatorPro
             }
 
             return writtenYears;
+        }
+
+        private static async Task WriteMonthlySalesAsync(DataContext db, Guid valuationTaskId, List<MonthlySalesRowDto> rows, string fileName)
+        {
+            // Task başına TEK obje — farklı dosyalardan gelen aylar hepsi aynı objeye birikir.
+            var obj = await db.MonthlySalesObjects.Include(o => o.MonthlySalesRows)
+                .FirstOrDefaultAsync(o => o.ValuationTaskId == valuationTaskId);
+            if (obj == null)
+            {
+                obj = new MonthlySalesObject { Id = Guid.NewGuid(), ValuationTaskId = valuationTaskId };
+                db.MonthlySalesObjects.Add(obj);
+            }
+            obj.FileName = fileName;
+            obj.IsRemoved = false;
+            obj.Status = ExtractionJobStatus.Completed;
+            obj.ErrorMessage = null;
+
+            var uploadedAt = DateTime.UtcNow;
+            foreach (var r in rows)
+            {
+                // Eski satırların üzerine yazılmaz — aynı (Year, Month) için yeni satır eklenir,
+                // mizandaki TrialBalanceAccount deseniyle aynı (en güncel CreatedAt okuma anında seçilir).
+                db.MonthlySalesRows.Add(new MonthlySalesRow
+                {
+                    Id = Guid.NewGuid(),
+                    MonthlySalesObjectId = obj.Id,
+                    Year = r.Year,
+                    Month = r.Month,
+                    Currency = r.Currency,
+                    Revenue = r.Revenue,
+                    MaterialCost = r.MaterialCost,
+                    Opex = r.Opex,
+                    CreatedAt = uploadedAt,
+                });
+            }
         }
     }
 }

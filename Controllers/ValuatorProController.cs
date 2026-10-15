@@ -295,6 +295,7 @@ namespace FinvestimaAPI.Controllers
             var task = await _context.ValuationTasks
                 .Include(t => t.Company)
                 .Include(t => t.TrialBalanceYears).ThenInclude(y => y.TrialBalanceAccounts)
+                .Include(t => t.MonthlySalesObject).ThenInclude(o => o!.MonthlySalesRows)
                 .FirstOrDefaultAsync(t => t.Id == valuationTaskId);
 
             if (task == null)
@@ -332,6 +333,14 @@ namespace FinvestimaAPI.Controllers
                         accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict, a.IsManualOverride }),
                     };
                 }),
+                monthlySales = (task.MonthlySalesObject != null && !task.MonthlySalesObject.IsRemoved)
+                    ? task.MonthlySalesObject.MonthlySalesRows
+                        // Aynı (Year, Month) için birden fazla yükleme olabilir — en güncel (CreatedAt) kazanır.
+                        .GroupBy(r => (r.Year, r.Month))
+                        .Select(g => g.OrderByDescending(r => r.CreatedAt).First())
+                        .OrderBy(r => r.Year).ThenBy(r => r.Month)
+                        .Select(r => new { r.Year, r.Month, r.Currency, r.Revenue, r.MaterialCost, r.Opex, r.IsManualOverride })
+                    : null,
             });
         }
     }

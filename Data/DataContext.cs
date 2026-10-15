@@ -15,6 +15,8 @@ namespace FinvestimaAPI.Data
         public DbSet<TrialBalanceYear> TrialBalanceYears { get; set; }
         public DbSet<TrialBalanceAccount> TrialBalanceAccounts { get; set; }
         public DbSet<TrialBalanceExtractionJob> TrialBalanceExtractionJobs { get; set; }
+        public DbSet<MonthlySalesObject> MonthlySalesObjects { get; set; }
+        public DbSet<MonthlySalesRow> MonthlySalesRows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -70,6 +72,28 @@ namespace FinvestimaAPI.Data
                 .HasForeignKey(j => j.ValuationTaskId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ValuationTask>()
+                .HasOne(t => t.MonthlySalesObject)
+                .WithOne(m => m.ValuationTask)
+                .HasForeignKey<MonthlySalesObject>(m => m.ValuationTaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MonthlySalesObject>()
+                .HasIndex(m => m.ValuationTaskId)
+                .IsUnique();
+
+            modelBuilder.Entity<MonthlySalesObject>()
+                .HasMany(o => o.MonthlySalesRows)
+                .WithOne(r => r.MonthlySalesObject)
+                .HasForeignKey(r => r.MonthlySalesObjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // NOT unique on (MonthlySalesObjectId, Year, Month): re-uploads add new rows
+            // for the same month instead of overwriting — same versioning pattern as
+            // TrialBalanceAccount, latest-by-CreatedAt resolved at read time.
+            modelBuilder.Entity<MonthlySalesRow>()
+                .HasIndex(r => new { r.MonthlySalesObjectId, r.Year, r.Month });
         }
     }
 }

@@ -29,11 +29,15 @@ namespace FinvestimaAPI.Services.Ai
         {
             Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "TrialBalanceYear.cs"),
             Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "TrialBalanceAccount.cs"),
+            Path.Combine(AppContext.BaseDirectory, "Models", "ValuatorPro", "MonthlySalesRow.cs"),
         };
 
         private const string TrialBalanceExtractionPrompt =
-            "You are extracting mizan (Turkish trial balance) rows from the REAL document below into " +
-            "the C# model shapes shown above (TrialBalanceYear/TrialBalanceAccount). Rules:\n\n" +
+            "The REAL document below may contain a mizan (Turkish trial balance), a monthly sales report, " +
+            "or both (as separate sheets/sections of the same file). Extract whichever is actually present " +
+            "into the matching part of the response — do not fabricate data for a kind of document that " +
+            "isn't there, and populate BOTH trialBalanceYears and monthlySalesRows if both are present.\n\n" +
+            "MIZAN rows (into trialBalanceYears, matching the TrialBalanceYear/TrialBalanceAccount C# shapes above):\n" +
             "1. A parent account code (e.g. \"100\") does not have to appear together with its sub-codes " +
             "(e.g. \"100 01\", \"100 01 01 001\"). Either may appear alone, depending on how the mizan was " +
             "exported. Do NOT assume the hierarchy is complete and do NOT fabricate a missing parent or " +
@@ -52,7 +56,17 @@ namespace FinvestimaAPI.Services.Ai
             "document when they differ.\n" +
             "6. months is 12 for a full calendar year; set it lower and isPartial=true for a partial-year " +
             "mizan (e.g. a current, not-yet-closed year). label should be the period string from the document " +
-            "if present (e.g. \"01/01/2025-31/12/2025 ARASI MİZAN\").";
+            "if present (e.g. \"01/01/2025-31/12/2025 ARASI MİZAN\").\n\n" +
+            "MONTHLY SALES rows (into monthlySalesRows) — a table with one row per year+month, typically " +
+            "with columns like Yıl/Ay/Dönem, TL Ciro, USD Ciro, Hammadde/Malzeme maliyeti, OPEX. Column names " +
+            "and which columns are present vary between files — infer the right ones by meaning, not by exact " +
+            "header text:\n" +
+            "1. One row per (year, month) actually present in the document — do not fabricate missing months.\n" +
+            "2. revenue/materialCost/opex should be the TL (TRY) figures; set currency=\"TRY\". If the document " +
+            "only has a foreign-currency figure (e.g. USD) and no TL figure for a value, leave that numeric " +
+            "field 0 rather than guessing a conversion — do not convert currencies yourself.\n" +
+            "3. If a column (materialCost or opex) is simply absent from the document, return 0 for it rather " +
+            "than fabricating a value.";
 
         public GeminiService(HttpClient httpClient, IConfiguration configuration, ILogger<GeminiService> logger)
         {
@@ -67,7 +81,7 @@ namespace FinvestimaAPI.Services.Ai
             var parts = new List<object>
             {
                 new { text = "Tekdüzen Hesap Planı (chart of accounts) reference:\n" + await File.ReadAllTextAsync(TekduzenReferencePath) },
-                new { text = "Target C# model shapes (TrialBalanceYear/TrialBalanceAccount):\n\n" + string.Join("\n\n", TrialBalanceModelPaths.Select(p => File.Exists(p) ? File.ReadAllText(p) : string.Empty)) },
+                new { text = "Target C# model shapes (TrialBalanceYear/TrialBalanceAccount/MonthlySalesRow):\n\n" + string.Join("\n\n", TrialBalanceModelPaths.Select(p => File.Exists(p) ? File.ReadAllText(p) : string.Empty)) },
             };
 
             if (currentSnapshot != null && currentSnapshot.TrialBalanceYears.Count > 0)
@@ -127,9 +141,27 @@ namespace FinvestimaAPI.Services.Ai
                                     },
                                     required = new[] { "year", "months", "isPartial", "trialBalanceAccounts" }
                                 }
+                            },
+                            monthlySalesRows = new
+                            {
+                                type = "ARRAY",
+                                items = new
+                                {
+                                    type = "OBJECT",
+                                    properties = new
+                                    {
+                                        year = new { type = "INTEGER" },
+                                        month = new { type = "INTEGER" },
+                                        currency = new { type = "STRING" },
+                                        revenue = new { type = "NUMBER" },
+                                        materialCost = new { type = "NUMBER" },
+                                        opex = new { type = "NUMBER" }
+                                    },
+                                    required = new[] { "year", "month", "currency", "revenue", "materialCost", "opex" }
+                                }
                             }
                         },
-                        required = new[] { "trialBalanceYears" }
+                        required = new[] { "trialBalanceYears", "monthlySalesRows" }
                     }
                 }
             };
