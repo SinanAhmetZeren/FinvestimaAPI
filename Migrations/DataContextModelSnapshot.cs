@@ -151,46 +151,6 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("ExchangeRates");
                 });
 
-            modelBuilder.Entity("FinvestimaAPI.Models.FinancialExtractionJob", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DocumentType")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasColumnType("text");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ResultJson")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Years")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("FinancialExtractionJobs");
-                });
-
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.Company", b =>
                 {
                     b.Property<Guid>("Id")
@@ -268,6 +228,9 @@ namespace FinvestimaAPI.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DocumentType")
+                        .HasColumnType("text");
+
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text");
 
@@ -281,8 +244,14 @@ namespace FinvestimaAPI.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("ValuationTaskId")
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ValuationTaskId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Years")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -306,7 +275,13 @@ namespace FinvestimaAPI.Migrations
                     b.Property<decimal?>("FileDebitTotal")
                         .HasColumnType("numeric");
 
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsPartial")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRemoved")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Label")
@@ -515,8 +490,7 @@ namespace FinvestimaAPI.Migrations
                     b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
                         .WithMany()
                         .HasForeignKey("ValuationTaskId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ValuationTask");
                 });

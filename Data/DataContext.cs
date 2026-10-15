@@ -9,7 +9,6 @@ namespace FinvestimaAPI.Data
     {
         public DataContext(DbContextOptions<DataContext> options) : base(options) { }
 
-        public DbSet<FinancialExtractionJob> FinancialExtractionJobs { get; set; }
         public DbSet<ExchangeRate> ExchangeRates { get; set; }
         public DbSet<Company> Companies { get; set; }
         public DbSet<ValuationTask> ValuationTasks { get; set; }
@@ -69,6 +68,7 @@ namespace FinvestimaAPI.Data
                 .HasOne(j => j.ValuationTask)
                 .WithMany()
                 .HasForeignKey(j => j.ValuationTaskId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade);
         }
     }

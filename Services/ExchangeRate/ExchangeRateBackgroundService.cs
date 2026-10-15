@@ -5,7 +5,7 @@ namespace FinvestimaAPI.Services.ExchangeRate
 {
     public class ExchangeRateBackgroundService : BackgroundService
     {
-        private static readonly DateOnly BackfillStart = new(2022, 1, 1);
+        private static readonly DateOnly BackfillStart = new(2020, 1, 1);
         private static readonly TimeZoneInfo IstanbulTz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<ExchangeRateBackgroundService> _logger;

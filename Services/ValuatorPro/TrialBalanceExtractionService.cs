@@ -38,7 +38,11 @@ namespace FinvestimaAPI.Services.ValuatorPro
                     .FirstOrDefaultAsync(t => t.Id == valuationTaskId);
                 if (task == null) throw new InvalidOperationException("ValuationTask not found.");
 
-                var snapshot = BuildSnapshot(task);
+                // Mevcut yılları Gemini'ye bağlam olarak göndermek yıl tespitine yanlış yönde
+                // bias yaratabiliyor (bkz. 2024 dosyası 2025 olarak etiketlenmesi) — comment out
+                // edildi, silinmedi. BuildSnapshot fonksiyonu hâlâ duruyor.
+                // var snapshot = BuildSnapshot(task);
+                TrialBalanceExtractionResultDto? snapshot = null;
 
                 var result = await geminiService.ExtractTrialBalanceAsync(fileBytes, mimeType, snapshot);
                 if (result == null || result.TrialBalanceYears.Count == 0)
@@ -48,7 +52,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
                 }
                 else
                 {
-                    var writtenYears = await WriteYearsAsync(db, valuationTaskId, result);
+                    var writtenYears = await WriteYearsAsync(db, valuationTaskId, result, job.FileName);
                     job.Status = ExtractionJobStatus.Completed;
                     job.ResultJson = JsonSerializer.Serialize(new { years = writtenYears });
                 }
@@ -84,7 +88,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
             {
                 // Gemini'ye bağlam olarak gönderilen snapshot, her kod için en güncel versiyonu
                 // yansıtmalı — geçmiş yüklemelerden kalan eski satırları tekrarlamamalı.
-                TrialBalanceYears = task.TrialBalanceYears.Select(y => new TrialBalanceYearDto
+                TrialBalanceYears = task.TrialBalanceYears.Where(y => !y.IsRemoved).Select(y => new TrialBalanceYearDto
                 {
                     Year = y.Year,
                     Months = y.Months,
@@ -97,7 +101,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
             };
         }
 
-        private static async Task<List<object>> WriteYearsAsync(DataContext db, Guid valuationTaskId, TrialBalanceExtractionResultDto result)
+        private static async Task<List<object>> WriteYearsAsync(DataContext db, Guid valuationTaskId, TrialBalanceExtractionResultDto result, string fileName)
         {
             var writtenYears = new List<object>();
             var uploadedAt = DateTime.UtcNow; // bu job'da yazılan tüm satırlar aynı zamanı paylaşır
@@ -128,6 +132,8 @@ namespace FinvestimaAPI.Services.ValuatorPro
                 existing.FileDebitTotal = yearDto.FileDebitTotal;
                 existing.FileCreditTotal = yearDto.FileCreditTotal;
                 existing.Label = yearDto.Label;
+                existing.FileName = fileName;
+                existing.IsRemoved = false;
                 existing.Status = balanced ? ExtractionJobStatus.Completed : ExtractionJobStatus.Failed;
                 existing.ErrorMessage = balanced ? null : $"Borç toplamı ({debitSum}) alacak toplamı ({creditSum}) ile eşleşmiyor.";
 

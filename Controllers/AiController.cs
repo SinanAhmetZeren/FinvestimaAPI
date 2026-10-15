@@ -7,6 +7,7 @@ using FinvestimaAPI.Data;
 using FinvestimaAPI.Dtos.AiDtos;
 using FinvestimaAPI.Helpers;
 using FinvestimaAPI.Models;
+using FinvestimaAPI.Models.ValuatorPro;
 using FinvestimaAPI.Services.Ai;
 
 namespace FinvestimaAPI.Controllers
@@ -138,7 +139,7 @@ namespace FinvestimaAPI.Controllers
 
         [HttpPost("extract-financials")]
         [RequestSizeLimit(20_000_000)]
-        public async Task<IActionResult> ExtractFinancials(IFormFile file, [FromForm] string? topPercent, [FromForm] string? bottomPercent, [FromForm] string? leftPercent, [FromForm] string? rightPercent, [FromForm] string? pages, [FromForm] string? documentType, [FromForm] string? years)
+        public async Task<IActionResult> ExtractFinancials(IFormFile file, [FromForm] string? topPercent, [FromForm] string? bottomPercent, [FromForm] string? leftPercent, [FromForm] string? rightPercent, [FromForm] string? pages, [FromForm] string? documentType, [FromForm] string? years, [FromForm] Guid? valuationTaskId)
         {
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
@@ -217,9 +218,10 @@ namespace FinvestimaAPI.Controllers
                 }
             }
 
-            var job = new FinancialExtractionJob
+            var job = new TrialBalanceExtractionJob
             {
                 Id = Guid.NewGuid(),
+                ValuationTaskId = valuationTaskId,
                 UserId = userId,
                 FileName = fileName,
                 DocumentType = string.IsNullOrWhiteSpace(documentType) ? null : documentType,
@@ -227,7 +229,7 @@ namespace FinvestimaAPI.Controllers
                 Status = ExtractionJobStatus.Pending,
             };
 
-            _context.FinancialExtractionJobs.Add(job);
+            _context.TrialBalanceExtractionJobs.Add(job);
             await _context.SaveChangesAsync();
 
             Console.WriteLine($"[AiController] Created extraction job {job.Id} for file '{fileName}' ({bytes.Length} bytes)");
@@ -270,7 +272,7 @@ namespace FinvestimaAPI.Controllers
         public async Task<ActionResult<ExtractionJobDto>> GetExtractionJob(Guid jobId)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var job = await _context.FinancialExtractionJobs
+            var job = await _context.TrialBalanceExtractionJobs
                 .FirstOrDefaultAsync(j => j.Id == jobId && j.UserId == userId);
 
             if (job == null)
@@ -293,7 +295,7 @@ namespace FinvestimaAPI.Controllers
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
             var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiPrepService>();
 
-            var job = await db.FinancialExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
+            var job = await db.TrialBalanceExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
             if (job == null) return;
 
             job.Status = ExtractionJobStatus.Processing;
@@ -334,7 +336,7 @@ namespace FinvestimaAPI.Controllers
             var db = scope.ServiceProvider.GetRequiredService<DataContext>();
             var geminiService = scope.ServiceProvider.GetRequiredService<IGeminiPrepService>();
 
-            var job = await db.FinancialExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
+            var job = await db.TrialBalanceExtractionJobs.FirstOrDefaultAsync(j => j.Id == jobId);
             if (job == null) return;
 
             job.Status = ExtractionJobStatus.Processing;

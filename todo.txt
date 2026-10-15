@@ -155,3 +155,11 @@ BACKEND DEĞİŞİKLİKLERİ
   (polling — MizanYil.Status üzerinden).
 - Validasyon: dönen her yıl için Debit ≈ Credit toplamı kontrolü, tutmazsa
   MizanYil.Status = Failed.
+
+
+
+----------
+
+TODO: 
+
+- L2 de yeni satır ekleme koy

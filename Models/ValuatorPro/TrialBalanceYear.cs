@@ -11,6 +11,8 @@ namespace FinvestimaAPI.Models.ValuatorPro
         public decimal? FileDebitTotal { get; set; }
         public decimal? FileCreditTotal { get; set; }
         public string? Label { get; set; }
+        public string? FileName { get; set; }
+        public bool IsRemoved { get; set; }
         public ExtractionJobStatus Status { get; set; } = ExtractionJobStatus.Pending;
         public string? ErrorMessage { get; set; }
         public List<TrialBalanceAccount> TrialBalanceAccounts { get; set; } = new();
