@@ -4,3 +4,4 @@ obj/
 appsettings.Development.json
 logs/
 .DS_Store
+deploy-and-db.txt
