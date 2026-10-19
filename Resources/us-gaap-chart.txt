@@ -1,0 +1,248 @@
+US GAAP GÖLGE HESAP PLANI
+=========================
+Bu tablo gerçek bir ABD muhasebe standardı DEĞİLDİR — Tekdüzen Hesap
+Planı'nın sayısal yapısını (kod aralıkları, hangi yüzlük grubun hangi
+bilanço/gelir tablosu kalemine karşılık geldiği) birebir koruyan, GAAP
+terminolojisiyle doldurulmuş bir eşleme tablosudur. Amaç: mevcut motorun
+(accounts.js, ledger.js — kod aralığına göre toplama, nature(), CONTRA
+seti) hiç değişmeden çalışmaya devam etmesi.
+
+Gemini'nin işi: ABD'li şirketin kendi (standart olmayan) hesap adlarını,
+anlamına göre, buradaki en uygun koda eşlemek. Şirketin orijinal kodu/adı
+AYRICA saklanır ve kullanıcıya her zaman o gösterilir — bu tablodaki
+kodlar/isimler kullanıcıya hiçbir zaman gösterilmez.
+
+BİLANÇO HESAPLARI
+1. Current Assets
+10. Cash and Cash Equivalents
+100. Cash
+101. Petty Cash
+102. Bank Accounts
+108. Other Cash Equivalents
+11. Short-term Investments
+110. Marketable Securities
+111. Short-term Debt Securities
+112. Government Securities (short-term)
+118. Other Short-term Investments
+119. Allowance for Decline in Value of Investments (-)
+12. Accounts Receivable, Trade
+120. Accounts Receivable
+121. Notes Receivable
+122. Unamortized Discount on Notes Receivable (-)
+126. Deposits and Guarantees Given
+127. Other Trade Receivables
+128. Doubtful Accounts Receivable
+129. Allowance for Doubtful Accounts (-)
+13. Other Receivables
+131. Due from Shareholders
+135. Due from Employees
+136. Other Miscellaneous Receivables
+138. Doubtful Other Receivables
+139. Allowance for Doubtful Other Receivables (-)
+15. Inventory
+150. Raw Materials
+151. Work in Process
+152. Finished Goods
+153. Merchandise Inventory
+157. Other Inventory
+158. Inventory Obsolescence Reserve (-)
+159. Advances to Suppliers
+18. Prepaid Expenses and Accrued Income
+180. Prepaid Expenses
+181. Accrued Income
+19. Other Current Assets
+190. Prepaid Taxes
+191. Input Tax Receivable (Sales Tax)
+193. Prepaid Taxes and Fees
+195. Employee Advances
+198. Other Miscellaneous Current Assets
+199. Allowance for Other Current Assets (-)
+2. Non-current Assets
+22. Long-term Receivables, Trade
+220. Accounts Receivable (long-term)
+221. Notes Receivable (long-term)
+226. Deposits and Guarantees Given (long-term)
+229. Allowance for Doubtful Accounts (long-term) (-)
+23. Other Long-term Receivables
+231. Due from Shareholders (long-term)
+236. Other Miscellaneous Receivables (long-term)
+239. Allowance for Other Long-term Receivables (-)
+24. Long-term Investments
+240. Equity Securities (long-term)
+241. Allowance for Decline in Value (-)
+242. Investments in Affiliates
+245. Investments in Subsidiaries
+248. Other Long-term Financial Assets
+249. Allowance for Other Long-term Financial Assets (-)
+25. Property, Plant & Equipment
+250. Land
+251. Land Improvements
+252. Buildings
+253. Machinery and Equipment
+254. Vehicles
+255. Furniture and Fixtures
+256. Other PP&E
+257. Accumulated Depreciation (-)
+258. Construction in Progress
+259. Advances for PP&E
+26. Intangible Assets
+260. Patents and Licenses
+261. Goodwill
+262. Organization Costs
+263. Research and Development Costs (capitalized)
+264. Leasehold Improvements
+267. Other Intangible Assets
+268. Accumulated Amortization (-)
+269. Advances for Intangible Assets
+28. Long-term Prepaid Expenses
+280. Long-term Prepaid Expenses
+281. Long-term Accrued Income
+29. Other Non-current Assets
+291. Deferred Tax Assets
+293. Right-of-Use Assets (Operating Lease)
+295. Prepaid Taxes (long-term)
+297. Other Miscellaneous Non-current Assets
+298. Inventory Obsolescence Reserve (long-term) (-)
+299. Accumulated Depreciation (Other) (-)
+
+3. Current Liabilities
+30. Short-term Borrowings
+300. Bank Loans Payable (short-term)
+301. Finance Lease Liabilities (short-term)
+303. Current Portion of Long-term Debt
+305. Notes Payable (short-term)
+309. Other Short-term Financial Liabilities
+32. Accounts Payable, Trade
+320. Accounts Payable
+321. Notes Payable, Trade
+326. Deposits and Guarantees Received
+329. Other Trade Payables
+33. Other Payables
+331. Due to Shareholders
+335. Due to Employees
+336. Other Miscellaneous Payables
+34. Advances Received
+340. Customer Advances
+349. Other Advances Received
+36. Taxes and Other Liabilities Payable
+360. Income Taxes Payable
+361. Payroll Taxes Payable
+369. Other Liabilities Payable
+37. Short-term Provisions
+370. Accrued Income Tax Liability
+372. Accrued Compensated Absences
+373. Warranty Reserve
+379. Other Short-term Provisions
+38. Deferred Revenue and Accrued Expenses
+380. Deferred Revenue (current)
+381. Accrued Expenses
+391. Sales Tax Payable
+399. Other Current Liabilities
+
+4. Long-term Liabilities
+40. Long-term Borrowings
+400. Bank Loans Payable (long-term)
+401. Finance Lease Liabilities (long-term)
+405. Bonds Payable
+409. Other Long-term Financial Liabilities
+42. Long-term Accounts Payable
+420. Accounts Payable (long-term)
+421. Notes Payable (long-term)
+426. Deposits and Guarantees Received (long-term)
+429. Other Trade Payables (long-term)
+43. Other Long-term Payables
+431. Due to Shareholders (long-term)
+436. Other Miscellaneous Payables (long-term)
+44. Advances Received (long-term)
+440. Customer Advances (long-term)
+47. Long-term Provisions
+472. Pension / Retirement Benefit Obligation
+479. Other Long-term Provisions
+48. Deferred Revenue (long-term)
+480. Deferred Revenue (long-term)
+481. Accrued Expenses (long-term)
+49. Other Long-term Liabilities
+491. Deferred Tax Liabilities
+493. Lease Liability (Operating Lease, long-term)
+499. Other Long-term Liabilities
+
+5. Equity
+50. Share Capital
+500. Common Stock
+501. Subscription Receivable (-)
+504. Additional Paid-in Capital
+505. Treasury Stock (-)
+52. Capital Reserves
+520. Share Premium
+521. Gain on Retirement of Treasury Stock
+529. Other Capital Reserves
+54. Retained Earnings Reserves
+540. Legal Reserves
+541. Statutory Reserves
+542. Reserve for Contingencies
+548. Other Retained Earnings Reserves
+549. Accumulated Other Comprehensive Income
+57. Retained Earnings
+570. Retained Earnings, Prior Years
+58. Accumulated Deficit
+580. Accumulated Deficit (-)
+59. Net Income (Loss) for the Period
+590. Net Income for the Period
+591. Net Loss for the Period (-)
+
+GELİR TABLOSU HESAPLARI (Income Statement)
+6. Income Statement Accounts
+60. Revenue
+600. Sales Revenue, Domestic
+601. Sales Revenue, Export
+602. Other Operating Revenue
+61. Sales Deductions
+610. Sales Returns (-)
+611. Sales Discounts (-)
+612. Other Sales Deductions (-)
+62. Cost of Goods Sold
+620. Cost of Finished Goods Sold (-)
+621. Cost of Merchandise Sold (-)
+622. Cost of Services Sold (-)
+623. Other Cost of Sales (-)
+63. Operating Expenses
+630. Research and Development Expenses (-)
+631. Selling, General and Administrative Expenses (-)
+632. General and Administrative Expenses (-)
+64. Other Income
+640. Dividend Income from Affiliates
+642. Interest Income
+643. Commission Income
+645. Gain on Sale of Investments
+646. Foreign Exchange Gains
+649. Other Operating Income
+65. Other Expenses
+653. Commission Expense (-)
+654. Provision Expense (-)
+655. Loss on Sale of Investments (-)
+656. Foreign Exchange Losses (-)
+659. Other Operating Expenses (-)
+66. Financing Expenses
+660. Short-term Borrowing Costs (-)
+661. Long-term Borrowing Costs (-)
+67. Non-operating / Extraordinary Items
+671. Prior Period Income
+679. Other Non-operating Income
+680. Idle Capacity Expenses (-)
+681. Prior Period Expenses (-)
+689. Other Non-operating Expenses (-)
+69. Period Result
+690. Income Before Taxes
+691. Income Tax Expense (-)
+692. Net Income (Loss)
+
+MALİYET HESAPLARI (7/A — Cost Accounting, opsiyonel)
+7. Cost Accounts
+710. Direct Materials
+720. Direct Labor
+730. Manufacturing Overhead
+740. Cost of Services
+750. Research and Development Costs
+760. Selling and Distribution Costs
+770. General and Administrative Costs
+780. Financing Costs

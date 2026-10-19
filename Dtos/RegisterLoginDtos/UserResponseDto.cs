@@ -9,5 +9,6 @@ namespace FinvestimaAPI.Dtos.RegisterLoginDtos
         public string RefreshToken { get; set; } = string.Empty;
         public DateTime? RefreshTokenExpiryTime { get; set; }
         public bool IsAdmin { get; set; } = false;
+        public string Language { get; set; } = "tr";
     }
 }

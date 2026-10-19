@@ -15,6 +15,8 @@ namespace FinvestimaAPI.Data
         public DbSet<TrialBalanceYear> TrialBalanceYears { get; set; }
         public DbSet<TrialBalanceAccount> TrialBalanceAccounts { get; set; }
         public DbSet<TrialBalanceExtractionJob> TrialBalanceExtractionJobs { get; set; }
+        public DbSet<ComparableMultiplesJob> ComparableMultiplesJobs { get; set; }
+        public DbSet<ComparableMultiplesTableRow> ComparableMultiplesTableRows { get; set; }
         public DbSet<MonthlySalesObject> MonthlySalesObjects { get; set; }
         public DbSet<MonthlySalesRow> MonthlySalesRows { get; set; }
 

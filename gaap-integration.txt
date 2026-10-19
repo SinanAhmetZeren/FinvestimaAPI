@@ -1,0 +1,89 @@
+GAAP ENTEGRASYONU — PLAN VE ADIMLAR
+======================================
+Amaç: Valuator Pro'ya, Tekdüzen hesap planına ek olarak US GAAP ile çalışan
+şirketleri de destekleyen tamamen ayrı bir akış eklemek. Mevcut Tekdüzen
+sayfaları/componentleri DEĞİŞMEYECEK, hiçbir yerde conditional render
+olmayacak — GAAP seçiliyse baştan ayrı bir component ağacı render edilecek.
+
+------------------------------------------
+TEMEL KARARLAR (konuşmada netleşti)
+------------------------------------------
+1. Muhasebe standardı task bazlı — admin task oluştururken seçer, müşteri
+   hiç görmez/seçmez.
+2. Dil kullanıcı bazlı — admin kullanıcı oluştururken/düzenlerken seçer,
+   login olunca otomatik o dilde gelir, kullanıcı değiştiremez.
+3. GAAP girdi dosyaları: Trial Balance (mizan eşdeğeri), Form 1120 veya
+   10-K/10-Q (beyanname eşdeğeri), Monthly Sales Report (aynen kalır).
+   General Ledger detail ve Bank Statement kullanılmayacak (gereksiz).
+4. Mimari: Tekdüzen'i "gölge kod" sistemi olarak koruyoruz. Gemini, GAAP
+   şirketinin kendi (standart olmayan) hesap adlarını bizim ürettiğimiz,
+   Tekdüzen'in sayısal yapısını taklit eden bir GAAP kod tablosuna eşler.
+   Böylece mevcut motor (accounts.js, ledger.js — kod aralığına göre
+   toplama, nature(), CONTRA seti) neredeyse hiç değişmeden çalışmaya
+   devam eder.
+5. Her hesap satırında HEM orijinal (girdideki) kod/isim HEM eşlenen gölge
+   kod tutulur. UI'da (mizan tablosu, drill-down modallar, L7 bulguları)
+   HER ZAMAN orijinal kod/isim gösterilir — kullanıcı gölge kodu ya da
+   Tekdüzen'i asla görmez/bilmez.
+6. Toplama ve oran hesaplama (matematik) HER ZAMAN deterministik frontend
+   kodunda kalır — Gemini'ye hesaplatılmaz. Gemini'nin tek işi sınıflandırma
+   (hangi hesap hangi standart kaleme ait).
+7. Yanlış sınıflandırma düzeltmesi: drill-down modal'a (zaten var olan,
+   hover/tıkla-gör özelliği) bir "yeniden ata" kontrolü eklenir. Kullanıcıya
+   gösterilen seçenekler GAAP'ın insan-okur isimleri (örn. "Accounts
+   Receivable", "Revenue") olur — hiçbir zaman kod/gölge kod gösterilmez.
+   Seçim bir override olarak kaydedilir (mevcut tutar-override deseniyle
+   aynı mantık, ama kalem ataması için).
+8. Finansal oranlar zaten büyük toplam kalemler (dönen varlık, kısa vadeli
+   yabancı kaynak vb.) üzerinden hesaplanıyor — tek bir hesabın yanlış
+   sınıflandırılması oranı büyük çarpıtmaz, ama bir hesabın tamamen yanlış
+   ana kategoriye düşmesi (varlık yerine yükümlülük gibi) belirgin şekilde
+   bozar ve düzeltme akışıyla fark edilip giderilebilir.
+
+------------------------------------------
+ADIMLAR
+------------------------------------------
+
+[BACKEND — FinvestimaAPI]
+1. ValuationTask modeline AccountingStandard alanı ekle (enum: Tekduzen,
+   UsGaap). Migration ekle, varsayılan Tekduzen (mevcut task'lar etkilenmez).
+2. AppUser'a (ya da ayrı bir kullanıcı ayarları tablosuna) Language alanı
+   ekle (enum ya da string, örn. "tr", "en"). Migration ekle.
+3. Admin task oluşturma endpoint'ine AccountingStandard parametresi ekle;
+   admin kullanıcı oluşturma/düzenleme endpoint'ine Language parametresi ekle.
+4. US GAAP için "gölge kod" referans tablosu oluştur (tekduzen-hesap-plani.txt
+   dosyasının GAAP eşdeğeri) — Tekdüzen'in sayısal yapısını taklit eden,
+   insan-okur GAAP isimleriyle eşleştirilmiş bir tablo.
+5. TrialBalanceAccount modeline orijinal kod/isim alanları ekle (mevcut
+   Code/Name alanları gölge koda ayrılırsa, OriginalCode/OriginalName yeni
+   eklenir — ya da tam tersi, isimlendirmeye dikkat).
+6. GeminiService: task'ın AccountingStandard'ına göre hangi referans
+   tablonun/prompt'un gönderileceğine karar ver (Tekduzen ise mevcut akış
+   aynen, UsGaap ise yeni GAAP tablosu + "orijinal kodu/ismi koru, ayrıca
+   gölge koda eşle" talimatı).
+7. Hesap sınıflandırma override'ı için endpoint ekle (kullanıcı bir hesabı
+   elle yeniden atadığında).
+
+[FRONTEND — finvestimaweb]
+8. Admin panelinde (ValuatorProAdmin.jsx) task oluşturma formuna muhasebe
+   standardı seçimi, kullanıcı formuna dil seçimi ekle.
+9. src/valuator-pro-gaap/ adında YENİ, mevcut src/valuator-pro/'ya
+   dokunmayan paralel bir klasör yapısı kur: kendi engine/ (accounts.js,
+   ledger.js, valuation.js, audit.js eşdeğerleri — GAAP kalem isimleriyle
+   çalışan), kendi layers/ (L1-L7 eşdeğerleri), kendi ValuatorProEngine.jsx.
+10. Üst seviyede (route/giriş noktası) task'ın AccountingStandard'ına göre
+    hangi ağacın (valuator-pro vs valuator-pro-gaap) mount edileceğine karar
+    verilir — tek bir yerde switch, alt componentlerde conditional render
+    YOK.
+11. GAAP motorunda sınıflandırma, kod aralığı yerine Gemini'nin döndürdüğü
+    gölge koda göre çalışır (ama kullanıcıya orijinal kod/isim gösterilir).
+12. Drill-down modallara "yeniden ata" kontrolünü GAAP tarafında ekle
+    (GAAP kalem isimleri dropdown'ı).
+13. Dil desteği: mevcut Türkçe metinleri bir çeviri katmanına taşı, login
+    sonrası kullanıcının Language alanına göre otomatik seç.
+
+------------------------------------------
+SIRA
+------------------------------------------
+Önce backend (1-7), sonra admin UI (8), sonra GAAP frontend iskeleti
+(9-10), sonra GAAP motor detayları (11-12), en son dil katmanı (13).

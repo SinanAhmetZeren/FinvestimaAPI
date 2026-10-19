@@ -300,6 +300,7 @@ namespace FinvestimaAPI.Controllers
                 RefreshToken = user.RefreshToken ?? string.Empty,
                 RefreshTokenExpiryTime = user.RefreshTokenExpiryTime,
                 IsAdmin = user.IsAdmin,
+                Language = user.Language,
             };
         }
 

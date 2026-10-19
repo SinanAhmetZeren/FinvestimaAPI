@@ -8,6 +8,7 @@ namespace FinvestimaAPI.Models.ValuatorPro
         public string Title { get; set; } = string.Empty;
         public string UserId { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public AccountingStandard AccountingStandard { get; set; } = AccountingStandard.Tekduzen;
         public List<TrialBalanceYear> TrialBalanceYears { get; set; } = new();
         public MonthlySalesObject? MonthlySalesObject { get; set; }
     }

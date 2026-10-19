@@ -53,6 +53,10 @@ namespace FinvestimaAPI.Migrations
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
@@ -169,6 +173,104 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("Companies");
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ComparableMultiplesJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Ebitda")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SectorSubSector")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("YearlySales")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ComparableMultiplesJobs");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ComparableMultiplesTableRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsEstimate")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Median")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("RangeHigh")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("RangeLow")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceBasis")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceUrl")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Vintage")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ValuationTaskId");
+
+                    b.ToTable("ComparableMultiplesTableRows");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>
                 {
                     b.Property<Guid>("Id")
@@ -269,6 +371,12 @@ namespace FinvestimaAPI.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalName")
                         .HasColumnType("text");
 
                     b.Property<Guid>("TrialBalanceYearId")
@@ -382,6 +490,9 @@ namespace FinvestimaAPI.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int>("AccountingStandard")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
@@ -534,6 +645,17 @@ namespace FinvestimaAPI.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ComparableMultiplesTableRow", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithMany()
+                        .HasForeignKey("ValuationTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ValuationTask");
                 });
 
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>

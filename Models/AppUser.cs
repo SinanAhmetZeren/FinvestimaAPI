@@ -11,5 +11,6 @@ namespace FinvestimaAPI.Models
         public DateTime? RefreshTokenExpiryTime { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsAdmin { get; set; } = false;
+        public string Language { get; set; } = "tr";
     }
 }

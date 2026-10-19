@@ -10,6 +10,7 @@ using FinvestimaAPI.Helpers;
 using FinvestimaAPI.Models;
 using FinvestimaAPI.Models.ValuatorPro;
 using FinvestimaAPI.Services.ValuatorPro;
+using FinvestimaAPI.Services.Ai;
 
 namespace FinvestimaAPI.Controllers
 {
@@ -19,13 +20,15 @@ namespace FinvestimaAPI.Controllers
     public class ValuatorProController : ControllerBase
     {
         private readonly ITrialBalanceExtractionService _trialBalanceExtractionService;
+        private readonly IComparableMultiplesJobService _comparableMultiplesJobService;
         private readonly DataContext _context;
         private readonly ILogger<ValuatorProController> _logger;
         private readonly UserManager<AppUser> _userManager;
 
-        public ValuatorProController(ITrialBalanceExtractionService trialBalanceExtractionService, DataContext context, ILogger<ValuatorProController> logger, UserManager<AppUser> userManager)
+        public ValuatorProController(ITrialBalanceExtractionService trialBalanceExtractionService, IComparableMultiplesJobService comparableMultiplesJobService, DataContext context, ILogger<ValuatorProController> logger, UserManager<AppUser> userManager)
         {
             _trialBalanceExtractionService = trialBalanceExtractionService;
+            _comparableMultiplesJobService = comparableMultiplesJobService;
             _context = context;
             _logger = logger;
             _userManager = userManager;
@@ -37,6 +40,7 @@ namespace FinvestimaAPI.Controllers
             public string Email { get; set; } = string.Empty;
             public string UserName { get; set; } = string.Empty;
             public string Password { get; set; } = string.Empty;
+            public string Language { get; set; } = "tr";
         }
 
         [Authorize(Roles = "Admin")]
@@ -57,6 +61,7 @@ namespace FinvestimaAPI.Controllers
                 EmailConfirmed = true,
                 Confirmed = true,
                 PublicId = Guid.NewGuid().ToString("N")[..10],
+                Language = string.IsNullOrWhiteSpace(req.Language) ? "tr" : req.Language.Trim(),
             };
             var result = await _userManager.CreateAsync(user, req.Password);
             if (!result.Succeeded)
@@ -71,9 +76,25 @@ namespace FinvestimaAPI.Controllers
         {
             var users = await _userManager.Users
                 .OrderBy(u => u.UserName)
-                .Select(u => new { u.Id, u.UserName, u.Email })
+                .Select(u => new { u.Id, u.UserName, u.Email, u.Language })
                 .ToListAsync();
             return Ok(users);
+        }
+
+        public class AdminUpdateUserLanguageRequest
+        {
+            public string Language { get; set; } = "tr";
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPut("admin/users/{userId}/language")]
+        public async Task<IActionResult> AdminUpdateUserLanguage(string userId, [FromBody] AdminUpdateUserLanguageRequest req)
+        {
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return NotFound();
+            user.Language = string.IsNullOrWhiteSpace(req.Language) ? "tr" : req.Language.Trim();
+            await _userManager.UpdateAsync(user);
+            return Ok(new { user.Id, user.Language });
         }
 
         public class AdminCreateTaskRequest
@@ -81,6 +102,7 @@ namespace FinvestimaAPI.Controllers
             public string UserId { get; set; } = string.Empty;
             public string CompanyName { get; set; } = string.Empty;
             public string? TaskTitle { get; set; }
+            public AccountingStandard AccountingStandard { get; set; } = AccountingStandard.Tekduzen;
         }
 
         [Authorize(Roles = "Admin")]
@@ -96,11 +118,11 @@ namespace FinvestimaAPI.Controllers
             var company = new Company { Id = Guid.NewGuid(), Name = req.CompanyName };
             _context.Companies.Add(company);
 
-            var task = new ValuationTask { Id = Guid.NewGuid(), CompanyId = company.Id, Title = req.TaskTitle ?? "Değerleme", UserId = req.UserId };
+            var task = new ValuationTask { Id = Guid.NewGuid(), CompanyId = company.Id, Title = req.TaskTitle ?? "Değerleme", UserId = req.UserId, AccountingStandard = req.AccountingStandard };
             _context.ValuationTasks.Add(task);
 
             await _context.SaveChangesAsync();
-            return Ok(new { task.Id, task.Title, companyName = company.Name });
+            return Ok(new { task.Id, task.Title, companyName = company.Name, accountingStandard = task.AccountingStandard.ToString() });
         }
 
         [Authorize(Roles = "Admin")]
@@ -110,7 +132,7 @@ namespace FinvestimaAPI.Controllers
             var tasks = await _context.ValuationTasks
                 .Include(t => t.Company)
                 .OrderByDescending(t => t.CreatedAt)
-                .Select(t => new { t.Id, t.Title, t.UserId, t.CreatedAt, companyName = t.Company!.Name })
+                .Select(t => new { t.Id, t.Title, t.UserId, t.CreatedAt, companyName = t.Company!.Name, accountingStandard = t.AccountingStandard.ToString() })
                 .ToListAsync();
             return Ok(tasks);
         }
@@ -126,7 +148,7 @@ namespace FinvestimaAPI.Controllers
                 .Include(t => t.Company)
                 .Where(t => t.UserId == userId)
                 .OrderByDescending(t => t.CreatedAt)
-                .Select(t => new { t.Id, t.Title, companyName = t.Company!.Name })
+                .Select(t => new { t.Id, t.Title, companyName = t.Company!.Name, accountingStandard = t.AccountingStandard.ToString() })
                 .ToListAsync();
             return Ok(tasks);
         }
@@ -233,6 +255,10 @@ namespace FinvestimaAPI.Controllers
             public string Name { get; set; } = string.Empty;
             public decimal Debit { get; set; }
             public decimal Credit { get; set; }
+            // GAAP: düzeltilen hesabın gölge kodu Code alanına, hangi orijinal hesabın
+            // düzeltildiği buraya gelir — boşsa Tekdüzen akışı (bkz. GaapAccountGrouper).
+            public string? OriginalCode { get; set; }
+            public string? OriginalName { get; set; }
         }
 
         // Kullanıcının mizan ızgarasında elle düzelttiği bir hesabı yeni bir satır olarak ekler —
@@ -265,6 +291,8 @@ namespace FinvestimaAPI.Controllers
                 CreditBalance = Math.Max(-net, 0),
                 IsManualOverride = true,
                 CreatedAt = DateTime.UtcNow,
+                OriginalCode = req.OriginalCode,
+                OriginalName = req.OriginalName,
             };
             _context.TrialBalanceAccounts.Add(row);
             await _context.SaveChangesAsync();
@@ -289,6 +317,157 @@ namespace FinvestimaAPI.Controllers
             return Ok();
         }
 
+        // L6'daki "Emsal çarpanlar" tablosunu Gemini ile üretir. Arama+yapılandırma 50s+ sürebiliyor
+        // (bkz. GeminiService.GetComparableMultiplesAsync) — tek senkron istek yerine, mizan
+        // yüklemesiyle aynı async job + polling deseni kullanılıyor.
+        [HttpPost("comparable-multiples")]
+        public async Task<IActionResult> StartComparableMultiples([FromBody] ComparableMultiplesRequestDto req)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var job = new ComparableMultiplesJob
+            {
+                Id = Guid.NewGuid(),
+                ValuationTaskId = req.ValuationTaskId,
+                UserId = userId,
+                SectorSubSector = req.SectorSubSector,
+                YearlySales = req.YearlySales,
+                Region = req.Region,
+                Country = req.Country,
+                Ebitda = req.Ebitda,
+                Language = req.Language,
+                Status = ExtractionJobStatus.Pending,
+            };
+            _context.ComparableMultiplesJobs.Add(job);
+            await _context.SaveChangesAsync();
+
+            _ = Task.Run(() => _comparableMultiplesJobService.ProcessJobAsync(job.Id));
+
+            return Accepted(new { jobId = job.Id });
+        }
+
+        [HttpGet("comparable-multiples/{jobId}")]
+        public async Task<IActionResult> GetComparableMultiplesJob(Guid jobId)
+        {
+            var job = await _context.ComparableMultiplesJobs.FirstOrDefaultAsync(j => j.Id == jobId);
+            if (job == null)
+                return NotFound();
+
+            return Ok(new
+            {
+                jobId = job.Id,
+                status = job.Status.ToString(),
+                errorMessage = job.ErrorMessage,
+                result = job.ResultJson != null ? JsonSerializer.Deserialize<JsonElement>(job.ResultJson) : (JsonElement?)null,
+            });
+        }
+
+        // Sayfa yenilendiğinde son tamamlanmış araştırmayı geri göstermek için — jobId bilmeye
+        // gerek yok, task'a göre en son Completed job'u döner (yoksa result:null).
+        [HttpGet("valuation-tasks/{valuationTaskId}/comparable-multiples/latest")]
+        public async Task<IActionResult> GetLatestComparableMultiplesJob(Guid valuationTaskId)
+        {
+            var job = await _context.ComparableMultiplesJobs
+                .Where(j => j.ValuationTaskId == valuationTaskId && j.Status == ExtractionJobStatus.Completed)
+                .OrderByDescending(j => j.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (job == null)
+                return Ok(new { jobId = (Guid?)null, result = (JsonElement?)null });
+
+            return Ok(new
+            {
+                jobId = job.Id,
+                result = job.ResultJson != null ? JsonSerializer.Deserialize<JsonElement>(job.ResultJson) : (JsonElement?)null,
+            });
+        }
+
+        // L6 Emsal çarpanlar tablosu — task başına kalıcı, boş başlar. "Kullan"/elle girilen
+        // satırlar sadece UI'da tutulur, "Kaydet" ile PUT edilince burada TÜM tablo değiştirilir.
+        [HttpGet("valuation-tasks/{valuationTaskId}/comparable-multiples-table")]
+        public async Task<IActionResult> GetComparableMultiplesTable(Guid valuationTaskId)
+        {
+            var rows = await _context.ComparableMultiplesTableRows
+                .Where(r => r.ValuationTaskId == valuationTaskId)
+                .OrderBy(r => r.SortOrder)
+                .Select(r => new { r.Id, r.Category, r.RangeLow, r.RangeHigh, r.Median, r.Vintage, r.SourceBasis, r.SourceUrl, r.IsEstimate })
+                .ToListAsync();
+            return Ok(rows);
+        }
+
+        [HttpPut("valuation-tasks/{valuationTaskId}/comparable-multiples-table")]
+        public async Task<IActionResult> SaveComparableMultiplesTable(Guid valuationTaskId, [FromBody] List<ComparableMultiplesTableRowDto> rows)
+        {
+            var task = await _context.ValuationTasks.FirstOrDefaultAsync(t => t.Id == valuationTaskId);
+            if (task == null)
+                return NotFound("ValuationTask bulunamadı.");
+
+            var existing = await _context.ComparableMultiplesTableRows.Where(r => r.ValuationTaskId == valuationTaskId).ToListAsync();
+            _context.ComparableMultiplesTableRows.RemoveRange(existing);
+
+            var newRows = rows.Select((r, i) => new ComparableMultiplesTableRow
+            {
+                Id = Guid.NewGuid(),
+                ValuationTaskId = valuationTaskId,
+                Category = r.Category,
+                RangeLow = r.RangeLow,
+                RangeHigh = r.RangeHigh,
+                Median = r.Median,
+                Vintage = r.Vintage,
+                SourceBasis = r.SourceBasis,
+                SourceUrl = r.SourceUrl,
+                IsEstimate = r.IsEstimate,
+                SortOrder = i,
+            }).ToList();
+            _context.ComparableMultiplesTableRows.AddRange(newRows);
+
+            await _context.SaveChangesAsync();
+            return Ok(newRows.Select(r => new { r.Id, r.Category, r.RangeLow, r.RangeHigh, r.Median, r.Vintage, r.SourceBasis, r.SourceUrl, r.IsEstimate }));
+        }
+
+        public class ReassignGaapAccountRequest
+        {
+            // Düzeltilecek hesabı orijinal kod/isimle buluruz (gölge kodla değil — kullanıcı
+            // gölge kodu hiç görmüyor). newCode, kullanıcının GAAP kalem isimlerinden seçtiği
+            // karşılığın gölge kodudur (frontend bu çeviriyi yapıp gönderir).
+            public string? OriginalCode { get; set; }
+            public string? OriginalName { get; set; }
+            public string NewCode { get; set; } = string.Empty;
+        }
+
+        // GAAP'ta Gemini'nin yanlış sınıflandırdığı bir hesabı kullanıcının elle düzeltmesi —
+        // o yılda, verilen orijinal kod/isme sahip EN GÜNCEL satır(lar)ı (GaapAccountGrouper'ın
+        // "current" kümesiyle aynı mantık) bulur, gölge kodunu değiştirir.
+        [HttpPost("valuation-tasks/{valuationTaskId}/years/{year}/gaap-accounts/reassign")]
+        public async Task<IActionResult> ReassignGaapAccount(Guid valuationTaskId, int year, [FromBody] ReassignGaapAccountRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.NewCode)) return BadRequest("NewCode zorunlu.");
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var ty = await _context.TrialBalanceYears
+                .Include(y => y.ValuationTask)
+                .Include(y => y.TrialBalanceAccounts)
+                .FirstOrDefaultAsync(y => y.ValuationTaskId == valuationTaskId && y.Year == year);
+            if (ty == null) return NotFound();
+            if (ty.ValuationTask?.UserId != userId) return Forbid();
+            if (ty.ValuationTask?.AccountingStandard != AccountingStandard.UsGaap) return BadRequest("Bu endpoint sadece GAAP task'ları için geçerli.");
+
+            var matches = ty.TrialBalanceAccounts
+                .Where(a => a.OriginalCode == req.OriginalCode && a.OriginalName == req.OriginalName)
+                .ToList();
+            if (matches.Count == 0) return NotFound("Belirtilen orijinal hesap bulunamadı.");
+
+            var latestCreatedAt = matches.Max(a => a.CreatedAt);
+            var current = matches.Where(a => a.CreatedAt == latestCreatedAt).ToList();
+            foreach (var a in current)
+            {
+                a.Code = req.NewCode;
+                a.IsManualOverride = true;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { updated = current.Count });
+        }
+
         [HttpGet("valuation-tasks/{valuationTaskId}")]
         public async Task<IActionResult> GetValuationTask(Guid valuationTaskId)
         {
@@ -307,8 +486,26 @@ namespace FinvestimaAPI.Controllers
                 task.Title,
                 companyId = task.CompanyId,
                 companyName = task.Company?.Name,
+                accountingStandard = task.AccountingStandard.ToString(),
                 years = task.TrialBalanceYears.Where(y => !y.IsRemoved).Select(y =>
                 {
+                    if (task.AccountingStandard == AccountingStandard.UsGaap)
+                    {
+                        // GAAP'ta derinlik yok — gölge koda göre grupla, aynı yüklemedeki farklı
+                        // orijinal hesapları topla, UI/düzeltme için orijinal kaynakları sakla.
+                        var groups = GaapAccountGrouper.Group(y.TrialBalanceAccounts);
+                        return new
+                        {
+                            y.Year,
+                            y.Months,
+                            y.IsPartial,
+                            y.FileName,
+                            Status = y.Status.ToString(),
+                            y.ErrorMessage,
+                            accounts = groups.Select(g => new { g.Code, g.Name, g.Debit, g.Credit, g.DebitBalance, g.CreditBalance, DepthMismatch = false, VersionConflict = false, g.IsManualOverride, sources = (object?)g.Sources.Select(s => new { s.OriginalCode, s.OriginalName, s.Debit, s.Credit, s.DebitBalance, s.CreditBalance }) }),
+                        };
+                    }
+
                     // DB'de ham (her derinlikteki, her yüklemeden) satırlar duruyor. Okuma anında:
                     // 1) koda göre en güncel versiyon seçilir (eski yüklemelerin üzerine yazılmaz,
                     //    sadece hangisi gösterileceğine burada karar verilir),
@@ -330,7 +527,7 @@ namespace FinvestimaAPI.Controllers
                         y.FileName,
                         Status = y.Status.ToString(),
                         y.ErrorMessage,
-                        accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict, a.IsManualOverride }),
+                        accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict, a.IsManualOverride, sources = (object?)null }),
                     };
                 }),
                 monthlySales = (task.MonthlySalesObject != null && !task.MonthlySalesObject.IsRemoved)

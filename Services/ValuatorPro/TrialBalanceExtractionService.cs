@@ -44,7 +44,7 @@ namespace FinvestimaAPI.Services.ValuatorPro
                 // var snapshot = BuildSnapshot(task);
                 TrialBalanceExtractionResultDto? snapshot = null;
 
-                var result = await geminiService.ExtractTrialBalanceAsync(fileBytes, mimeType, snapshot);
+                var result = await geminiService.ExtractTrialBalanceAsync(fileBytes, mimeType, snapshot, task.AccountingStandard);
                 if (result == null || (result.TrialBalanceYears.Count == 0 && result.MonthlySalesRows.Count == 0))
                 {
                     job.Status = ExtractionJobStatus.Failed;
@@ -152,6 +152,8 @@ namespace FinvestimaAPI.Services.ValuatorPro
                         TrialBalanceYearId = existing.Id,
                         Code = h.Code,
                         Name = h.Name,
+                        OriginalCode = h.OriginalCode,
+                        OriginalName = h.OriginalName,
                         Debit = h.Debit,
                         Credit = h.Credit,
                         DebitBalance = h.DebitBalance,
