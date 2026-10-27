@@ -503,6 +503,7 @@ namespace FinvestimaAPI.Controllers
                             Status = y.Status.ToString(),
                             y.ErrorMessage,
                             accounts = groups.Select(g => new { g.Code, g.Name, g.Debit, g.Credit, g.DebitBalance, g.CreditBalance, DepthMismatch = false, VersionConflict = false, g.IsManualOverride, sources = (object?)g.Sources.Select(s => new { s.OriginalCode, s.OriginalName, s.Debit, s.Credit, s.DebitBalance, s.CreditBalance }) }),
+                            subAccounts = (object?)null,
                         };
                     }
 
@@ -519,6 +520,14 @@ namespace FinvestimaAPI.Controllers
                     foreach (var a in aggregated)
                         if (conflictRoots.Contains(a.Code)) a.VersionConflict = true;
 
+                    // Katkı seviyeleri (Statements.jsx) 6/7 sınıfı hesapların 3 haneden derin kırılımını
+                    // kullanır — accounts her zaman 3'lü kök seviyesinde olduğu için bu derin satırları
+                    // ayrı bir alanda, ham haliyle (kümelenmeden) gönderiyoruz.
+                    var subAccounts = resolved
+                        .Where(r => r.Row.Code.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 1
+                            && (r.Row.Code.TrimStart().StartsWith("6") || r.Row.Code.TrimStart().StartsWith("7")))
+                        .Select(r => r.Row);
+
                     return new
                     {
                         y.Year,
@@ -528,6 +537,7 @@ namespace FinvestimaAPI.Controllers
                         Status = y.Status.ToString(),
                         y.ErrorMessage,
                         accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict, a.IsManualOverride, sources = (object?)null }),
+                        subAccounts = (object?)subAccounts.Select(r => new { r.Code, r.Name, r.Debit, r.Credit, r.DebitBalance, r.CreditBalance }),
                     };
                 }),
                 monthlySales = (task.MonthlySalesObject != null && !task.MonthlySalesObject.IsRemoved)
