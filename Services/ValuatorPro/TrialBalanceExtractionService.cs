@@ -63,6 +63,14 @@ namespace FinvestimaAPI.Services.ValuatorPro
 
                 job.CompletedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+
+                // Mizan yazıldıktan hemen sonra L5/L6 varsayımlarını backend kendisi hesaplayıp
+                // kaydeder — frontend'in ayrıca bir istek atmasına gerek yok (bkz. ValuationAssumptionsService).
+                if (job.Status == ExtractionJobStatus.Completed && task.AccountingStandard != AccountingStandard.UsGaap)
+                {
+                    try { await ValuationAssumptionsService.ComputeAndSaveAsync(db, valuationTaskId); }
+                    catch (Exception asmEx) { _logger.LogError(asmEx, "Could not compute default assumptions for task {TaskId}", valuationTaskId); }
+                }
             }
             catch (Exception ex)
             {

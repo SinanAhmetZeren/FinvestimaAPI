@@ -271,6 +271,28 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("ComparableMultiplesTableRows");
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.DepreciationOverride", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ValuationTaskId");
+
+                    b.ToTable("DepreciationOverrides");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>
                 {
                     b.Property<Guid>("Id")
@@ -491,6 +513,71 @@ namespace FinvestimaAPI.Migrations
                     b.ToTable("TrialBalanceYears");
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationAddback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("HasEvidence")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ValuationTaskId");
+
+                    b.ToTable("ValuationAddbacks");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationAssumptions", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssumptionsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ValuationTaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ValuationTaskId");
+
+                    b.ToTable("ValuationAssumptions");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -664,6 +751,17 @@ namespace FinvestimaAPI.Migrations
                     b.Navigation("ValuationTask");
                 });
 
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.DepreciationOverride", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithMany()
+                        .HasForeignKey("ValuationTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ValuationTask");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.MonthlySalesObject", b =>
                 {
                     b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
@@ -719,6 +817,28 @@ namespace FinvestimaAPI.Migrations
                 {
                     b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
                         .WithMany("TrialBalanceYears")
+                        .HasForeignKey("ValuationTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ValuationTask");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationAddback", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithMany()
+                        .HasForeignKey("ValuationTaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ValuationTask");
+                });
+
+            modelBuilder.Entity("FinvestimaAPI.Models.ValuatorPro.ValuationAssumptions", b =>
+                {
+                    b.HasOne("FinvestimaAPI.Models.ValuatorPro.ValuationTask", "ValuationTask")
+                        .WithMany()
                         .HasForeignKey("ValuationTaskId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

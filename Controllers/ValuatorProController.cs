@@ -469,6 +469,140 @@ namespace FinvestimaAPI.Controllers
             return Ok(newRows.Select(r => new { r.Id, r.Category, r.RangeLow, r.RangeHigh, r.Median, r.Vintage, r.SourceBasis, r.SourceUrl, r.IsEstimate }));
         }
 
+        // L4 "Geri eklemeler" — task başına kalıcı liste, ComparableMultiplesTableRow ile aynı
+        // desen: "Kaydet" her seferinde TÜM listeyi değiştirir.
+        [HttpGet("valuation-tasks/{valuationTaskId}/addbacks")]
+        public async Task<IActionResult> GetAddbacks(Guid valuationTaskId)
+        {
+            var rows = await _context.ValuationAddbacks
+                .Where(r => r.ValuationTaskId == valuationTaskId)
+                .OrderBy(r => r.SortOrder)
+                .Select(r => new { r.Id, r.Name, r.Description, r.Year, r.Amount, r.Currency, r.HasEvidence, r.IsActive })
+                .ToListAsync();
+            return Ok(rows);
+        }
+
+        [HttpPut("valuation-tasks/{valuationTaskId}/addbacks")]
+        public async Task<IActionResult> SaveAddbacks(Guid valuationTaskId, [FromBody] List<ValuationAddbackDto> rows)
+        {
+            var task = await _context.ValuationTasks.FirstOrDefaultAsync(t => t.Id == valuationTaskId);
+            if (task == null)
+                return NotFound("ValuationTask bulunamadı.");
+
+            var existing = await _context.ValuationAddbacks.Where(r => r.ValuationTaskId == valuationTaskId).ToListAsync();
+            _context.ValuationAddbacks.RemoveRange(existing);
+
+            var newRows = rows.Select((r, i) => new ValuationAddback
+            {
+                Id = Guid.NewGuid(),
+                ValuationTaskId = valuationTaskId,
+                Name = r.Name,
+                Description = r.Description,
+                Year = r.Year,
+                Amount = r.Amount,
+                Currency = r.Currency,
+                HasEvidence = r.HasEvidence,
+                IsActive = r.IsActive,
+                SortOrder = i,
+            }).ToList();
+            _context.ValuationAddbacks.AddRange(newRows);
+
+            await _context.SaveChangesAsync();
+            return Ok(newRows.Select(r => new { r.Id, r.Name, r.Description, r.Year, r.Amount, r.Currency, r.HasEvidence, r.IsActive }));
+        }
+
+        // L4 "Amortisman" elle giriş listesi — task+yıl başına tek tutar, aynı tam-liste-değiştir
+        // deseni (addbacks gibi).
+        [HttpGet("valuation-tasks/{valuationTaskId}/depreciation-overrides")]
+        public async Task<IActionResult> GetDepreciationOverrides(Guid valuationTaskId)
+        {
+            var rows = await _context.DepreciationOverrides
+                .Where(r => r.ValuationTaskId == valuationTaskId)
+                .Select(r => new { r.Year, r.Amount })
+                .ToListAsync();
+            return Ok(rows);
+        }
+
+        [HttpPut("valuation-tasks/{valuationTaskId}/depreciation-overrides")]
+        public async Task<IActionResult> SaveDepreciationOverrides(Guid valuationTaskId, [FromBody] List<DepreciationOverrideDto> rows)
+        {
+            var task = await _context.ValuationTasks.FirstOrDefaultAsync(t => t.Id == valuationTaskId);
+            if (task == null)
+                return NotFound("ValuationTask bulunamadı.");
+
+            var existing = await _context.DepreciationOverrides.Where(r => r.ValuationTaskId == valuationTaskId).ToListAsync();
+            _context.DepreciationOverrides.RemoveRange(existing);
+
+            var newRows = rows.Select(r => new DepreciationOverride
+            {
+                Id = Guid.NewGuid(),
+                ValuationTaskId = valuationTaskId,
+                Year = r.Year,
+                Amount = r.Amount,
+            }).ToList();
+            _context.DepreciationOverrides.AddRange(newRows);
+
+            await _context.SaveChangesAsync();
+            return Ok(newRows.Select(r => new { r.Year, r.Amount }));
+        }
+
+        // L5/L6 "Varsayımlar" — task başına tek JSON blob (frontend'deki `asm` objesiyle birebir).
+        // Mizan ilk yüklenip varsayılanlar hesaplandığında otomatik yazılır; elle değişiklikler
+        // "Kaydet" ile üzerine yazar.
+        [HttpGet("valuation-tasks/{valuationTaskId}/assumptions")]
+        public async Task<IActionResult> GetAssumptions(Guid valuationTaskId)
+        {
+            var row = await _context.ValuationAssumptions.FirstOrDefaultAsync(r => r.ValuationTaskId == valuationTaskId);
+            if (row == null) return Ok(new { assumptions = (JsonElement?)null });
+            return Ok(new { assumptions = JsonSerializer.Deserialize<JsonElement>(row.AssumptionsJson) });
+        }
+
+        public class SaveAssumptionsRequest
+        {
+            public JsonElement Assumptions { get; set; }
+        }
+
+        [HttpPut("valuation-tasks/{valuationTaskId}/assumptions")]
+        public async Task<IActionResult> SaveAssumptions(Guid valuationTaskId, [FromBody] SaveAssumptionsRequest req)
+        {
+            var task = await _context.ValuationTasks.FirstOrDefaultAsync(t => t.Id == valuationTaskId);
+            if (task == null)
+                return NotFound("ValuationTask bulunamadı.");
+
+            var row = await _context.ValuationAssumptions.FirstOrDefaultAsync(r => r.ValuationTaskId == valuationTaskId);
+            var json = JsonSerializer.Serialize(req.Assumptions);
+            if (row == null)
+            {
+                row = new Models.ValuatorPro.ValuationAssumptions { Id = Guid.NewGuid(), ValuationTaskId = valuationTaskId, AssumptionsJson = json };
+                _context.ValuationAssumptions.Add(row);
+            }
+            else
+            {
+                row.AssumptionsJson = json;
+                row.UpdatedAt = DateTime.UtcNow;
+            }
+            await _context.SaveChangesAsync();
+            return Ok();
+        }
+
+        // L5/L6 varsayımlarını backend'in kendi motoruyla (ValuationEngine — frontend'deki
+        // buildHistory/baseYear/defaultAssumptions'ın C# portu) hesaplayıp kaydeder. Mizan
+        // yüklenince ve "Varsayımları baza döndür" denince burası çağrılır — elle girilen
+        // büyüme/maliyet hedefleri burada HESAPLANMAZ (formülü yok), sadece "Kaydet" ile
+        // (SaveAssumptions) olduğu gibi yazılır.
+        [HttpPost("valuation-tasks/{valuationTaskId}/compute-assumptions")]
+        public async Task<IActionResult> ComputeAssumptions(Guid valuationTaskId)
+        {
+            var task = await _context.ValuationTasks.FirstOrDefaultAsync(t => t.Id == valuationTaskId);
+            if (task == null) return NotFound("ValuationTask bulunamadı.");
+            if (task.AccountingStandard == AccountingStandard.UsGaap)
+                return BadRequest("Bu hesaplama sadece Tekdüzen task'ları için geçerli.");
+
+            var json = await ValuationAssumptionsService.ComputeAndSaveAsync(_context, valuationTaskId);
+            if (json == null) return Ok(new { assumptions = (object?)null });
+            return Ok(new { assumptions = JsonSerializer.Deserialize<JsonElement>(json) });
+        }
+
         public class ReassignGaapAccountRequest
         {
             // Düzeltilecek hesabı orijinal kod/isimle buluruz (gölge kodla değil — kullanıcı
