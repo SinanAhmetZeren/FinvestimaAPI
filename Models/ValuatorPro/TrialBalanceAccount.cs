@@ -20,5 +20,13 @@ namespace FinvestimaAPI.Models.ValuatorPro
         public decimal CreditBalance { get; set; }
         public bool IsManualOverride { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Katkı seviyeleri (Statements.jsx) — 7'li gider alt hesapları için B-F sınıflandırması.
+        // Null = henüz hesaplanmadı. ContributionClassIsManual true ise kullanıcı elle değiştirmiştir
+        // ve yeni mizan yüklemesinde ÜZERİNE YAZILMAZ (bkz. TrialBalanceExtractionService); false ise
+        // her yeni yüklemede önceki satırdan taşınır ve frontend'in güncel classify() çıktısıyla
+        // senkronize tutulur (bkz. SaveContributionClassifications).
+        public string? ContributionClass { get; set; }
+        public bool ContributionClassIsManual { get; set; }
     }
 }

@@ -13,5 +13,7 @@ namespace FinvestimaAPI.Dtos.ValuatorProDtos
         public decimal DebitBalance { get; set; }
         public decimal CreditBalance { get; set; }
         public bool IsManualOverride { get; set; }
+        public string? ContributionClass { get; set; }
+        public bool ContributionClassIsManual { get; set; }
     }
 }

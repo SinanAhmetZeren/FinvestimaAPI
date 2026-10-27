@@ -141,10 +141,23 @@ namespace FinvestimaAPI.Services.ValuatorPro
                 existing.Status = balanced ? ExtractionJobStatus.Completed : ExtractionJobStatus.Failed;
                 existing.ErrorMessage = balanced ? null : $"Borç toplamı ({debitSum}) alacak toplamı ({creditSum}) ile eşleşmiyor.";
 
+                // Elle değiştirilmiş katkı seviyesi sınıflandırmasını, aynı kod için yeni satıra
+                // taşı — yoksa "en güncel" olarak okunan yeni satırda boş kalır ve kullanıcının
+                // elle girdiği değer kaybolmuş gibi görünür (bkz. TrialBalanceAccount.ContributionClassIsManual).
+                var priorManualClass = TrialBalanceVersionResolver.ResolveLatest(existing.TrialBalanceAccounts)
+                    .Where(r => r.Row.ContributionClassIsManual)
+                    .ToDictionary(r => r.Row.Code, r => r.Row.ContributionClass);
+
                 // Eski satırların üzerine yazılmaz — yeni satırlar eklenir. Koda göre hangisinin
                 // güncel olduğu okuma anında (TrialBalanceVersionResolver) CreatedAt'e bakılarak belirlenir.
                 foreach (var h in yearDto.TrialBalanceAccounts)
                 {
+                    var carriedManual = priorManualClass.TryGetValue(h.Code, out var cls);
+                    // Katkı seviyeleri (Statements.jsx) sadece 3 haneden derin, 6/7 sınıfı alt
+                    // hesaplarda anlamlı — varsayılanı burada hesaplayıp yazıyoruz, sayfa her
+                    // açıldığında frontend'in tekrar hesaplayıp PUT etmesine gerek kalmasın diye.
+                    var isDeepCostSub = h.Code.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 1
+                        && (h.Code.TrimStart().StartsWith("6") || h.Code.TrimStart().StartsWith("7"));
                     db.TrialBalanceAccounts.Add(new TrialBalanceAccount
                     {
                         Id = Guid.NewGuid(),
@@ -158,6 +171,8 @@ namespace FinvestimaAPI.Services.ValuatorPro
                         Credit = h.Credit,
                         DebitBalance = h.DebitBalance,
                         CreditBalance = h.CreditBalance,
+                        ContributionClass = carriedManual ? cls : (isDeepCostSub ? ContributionClassifier.Classify(h.Code, h.Name) : null),
+                        ContributionClassIsManual = carriedManual,
                         CreatedAt = uploadedAt,
                     });
                 }

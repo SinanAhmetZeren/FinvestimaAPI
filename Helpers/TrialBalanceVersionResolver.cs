@@ -35,6 +35,8 @@ namespace FinvestimaAPI.Helpers
                             DebitBalance = latest.DebitBalance,
                             CreditBalance = latest.CreditBalance,
                             IsManualOverride = latest.IsManualOverride,
+                            ContributionClass = latest.ContributionClass,
+                            ContributionClassIsManual = latest.ContributionClassIsManual,
                         },
                         HasMultipleVersions = distinctTimestamps > 1,
                     };

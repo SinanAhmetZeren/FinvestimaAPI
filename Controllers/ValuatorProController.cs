@@ -300,6 +300,51 @@ namespace FinvestimaAPI.Controllers
             return Ok(new { row.Id, row.CreatedAt });
         }
 
+        public class ContributionClassificationItem
+        {
+            public string Code { get; set; } = string.Empty;
+            public string? ContributionClass { get; set; }
+            public bool IsManual { get; set; }
+        }
+
+        public class SaveContributionClassificationsRequest
+        {
+            public Guid ValuationTaskId { get; set; }
+            public int Year { get; set; }
+            public List<ContributionClassificationItem> Items { get; set; } = new();
+        }
+
+        // Katkı seviyeleri (Statements.jsx) sınıflandırmasını kaydeder — hem otomatik (classify()
+        // çıktısı) hem elle değiştirilen satırlar buraya gelir. O kod için EN GÜNCEL satır üzerinde
+        // (yeni satır eklemeden) güncellenir; yeni bir mizan yüklemesi geldiğinde elle olanlar
+        // TrialBalanceExtractionService tarafından yeni satıra taşınır.
+        [HttpPut("trial-balance-accounts/contribution-classifications")]
+        public async Task<IActionResult> SaveContributionClassifications([FromBody] SaveContributionClassificationsRequest req)
+        {
+            var year = await _context.TrialBalanceYears.Include(y => y.TrialBalanceAccounts)
+                .FirstOrDefaultAsync(y => y.ValuationTaskId == req.ValuationTaskId && y.Year == req.Year);
+            if (year == null) return NotFound("TrialBalanceYear bulunamadı.");
+
+            // ResolveLatest DTO'ya kopyalıyor (EF tarafından izlenmiyor) — burada doğrudan entity
+            // üzerinde en güncel satırı (CreatedAt'e göre) bulup onu değiştiriyoruz.
+            var latestByCode = year.TrialBalanceAccounts
+                .GroupBy(r => r.Code)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First());
+
+            foreach (var item in req.Items)
+            {
+                if (!latestByCode.TryGetValue(item.Code, out var row)) continue;
+                // Elle değiştirilmiş bir satırı, otomatik (isManual=false) bir senkron asla ezmesin —
+                // sadece kullanıcı o satırı tekrar değiştirdiğinde (item.IsManual=true) güncellenir.
+                if (row.ContributionClassIsManual && !item.IsManual) continue;
+                row.ContributionClass = item.ContributionClass;
+                row.ContributionClassIsManual = item.IsManual;
+            }
+            await _context.SaveChangesAsync();
+
+            return Ok();
+        }
+
         // Bir yılı task'tan tamamen kaldırır (soft-delete) — hücre bazlı düzeltmeden farklı,
         // yanlış/istenmeyen bir yükleme tamamen geri çekilmek istendiğinde kullanılır.
         [HttpPost("valuation-tasks/{valuationTaskId}/years/{year}/remove")]
@@ -537,7 +582,7 @@ namespace FinvestimaAPI.Controllers
                         Status = y.Status.ToString(),
                         y.ErrorMessage,
                         accounts = aggregated.Select(a => new { a.Code, a.Name, a.Debit, a.Credit, a.DebitBalance, a.CreditBalance, a.DepthMismatch, a.VersionConflict, a.IsManualOverride, sources = (object?)null }),
-                        subAccounts = (object?)subAccounts.Select(r => new { r.Code, r.Name, r.Debit, r.Credit, r.DebitBalance, r.CreditBalance }),
+                        subAccounts = (object?)subAccounts.Select(r => new { r.Code, r.Name, r.Debit, r.Credit, r.DebitBalance, r.CreditBalance, r.ContributionClass, r.ContributionClassIsManual }),
                     };
                 }),
                 monthlySales = (task.MonthlySalesObject != null && !task.MonthlySalesObject.IsRemoved)

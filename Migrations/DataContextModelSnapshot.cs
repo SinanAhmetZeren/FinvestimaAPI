@@ -351,6 +351,12 @@ namespace FinvestimaAPI.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ContributionClass")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("ContributionClassIsManual")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
