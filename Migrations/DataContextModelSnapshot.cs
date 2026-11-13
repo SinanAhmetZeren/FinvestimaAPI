@@ -219,6 +219,18 @@ namespace FinvestimaAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ConfirmationCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ConfirmationCodeExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ConfirmationLastSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ConfirmationSendCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ContactFullName")
                         .HasColumnType("text");
 

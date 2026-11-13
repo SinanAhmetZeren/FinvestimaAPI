@@ -24,5 +24,12 @@ namespace FinvestimaAPI.Models.ValuatorPro
         public string? ContactFullName { get; set; }
         public string? ContactRole { get; set; }
         public string? ContactPhone { get; set; }
+
+        // A0 doğrulama: Task henüz yokken (ValuationTask oluşmadan) bu firma kaydı "beklemede"
+        // sayılır. Kod ReportEmail'e gider, 1 dk / 3 dk aralıklarla en fazla 3 kez gönderilebilir.
+        public string? ConfirmationCode { get; set; }
+        public DateTime? ConfirmationCodeExpiry { get; set; }
+        public int ConfirmationSendCount { get; set; }
+        public DateTime? ConfirmationLastSentAt { get; set; }
     }
 }

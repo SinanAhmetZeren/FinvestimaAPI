@@ -171,22 +171,104 @@ namespace FinvestimaAPI.Controllers
             return Ok(new { user.Id, user.Language });
         }
 
-        // ── A0: giriş yapmış kullanıcı kendi firmasını/task'ını ekliyor ───────────────────
-        [HttpPost("onboarding/start-task")]
-        public async Task<IActionResult> OnboardingStartTask()
+        public class OnboardingStartTaskRequest
         {
+            public string CompanyName { get; set; } = string.Empty;
+            public string? Website { get; set; }
+            public string? Sector { get; set; }
+            public string? SubSector { get; set; }
+            public string? Employees { get; set; }
+            public string? Revenue { get; set; }
+            public string? Purpose { get; set; }
+            public string ReportEmail { get; set; } = string.Empty;
+            public string? FullName { get; set; }
+            public string? Role { get; set; }
+            public string? Phone { get; set; }
+        }
+
+        // ── A0: giriş yapmış kullanıcı kendi firmasını/task'ını ekliyor ───────────────────
+        // Kod, hesap e-postasına değil, burada girilen ReportEmail'e gider. Aynı endpoint hem
+        // ilk gönderimi hem "yeniden gönder"i karşılar: aynı kullanıcı + aynı ReportEmail için
+        // bekleyen (task'sız) bir Company varsa resend sayılır (en fazla 3 kez, 1 dk / 3 dk
+        // bekleme ile); yoksa yeni Company açılır ve kredi hemen burada düşülür.
+        [HttpPost("onboarding/start-task")]
+        public async Task<IActionResult> OnboardingStartTask([FromBody] OnboardingStartTaskRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.CompanyName)) return BadRequest("Firma adı zorunlu.");
+            if (string.IsNullOrWhiteSpace(req.ReportEmail)) return BadRequest("Rapor e-postası zorunlu.");
+
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) return Unauthorized();
 
+            var reportEmail = req.ReportEmail.Trim();
+            var pending = await _context.Companies
+                .Where(c => c.OwnerUserId == userId && c.ReportEmail == reportEmail && c.ConfirmationCode != null && !c.ValuationTasks.Any())
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            Company company;
+            if (pending != null)
+            {
+                if (pending.ConfirmationSendCount >= 3)
+                    return BadRequest("Bu e-posta için en fazla 3 kez kod gönderilebilir. Lütfen rapor e-postasını kontrol edin veya bilgileri değiştirin.");
+                var requiredWait = pending.ConfirmationSendCount == 1 ? TimeSpan.FromMinutes(1) : TimeSpan.FromMinutes(3);
+                var elapsed = DateTime.UtcNow - (pending.ConfirmationLastSentAt ?? DateTime.UtcNow);
+                if (elapsed < requiredWait)
+                    return BadRequest(new { code = "wait", error = $"Yeni kod isteyebilmek için {(int)Math.Ceiling((requiredWait - elapsed).TotalSeconds)} saniye bekleyin." });
+
+                pending.Name = req.CompanyName.Trim();
+                pending.Website = CorporateEmailChecker.WebsiteHost(req.Website) ?? req.Website?.Trim();
+                pending.Sector = req.Sector?.Trim();
+                pending.SubSector = req.SubSector?.Trim();
+                pending.Employees = req.Employees?.Trim();
+                pending.Revenue = req.Revenue?.Trim();
+                pending.Purpose = req.Purpose?.Trim();
+                pending.ContactFullName = req.FullName?.Trim();
+                pending.ContactRole = req.Role?.Trim();
+                pending.ContactPhone = req.Phone?.Trim();
+                pending.ConfirmationSendCount += 1;
+                pending.ConfirmationLastSentAt = DateTime.UtcNow;
+                company = pending;
+            }
+            else
+            {
+                var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
+                var creditBalance = await _context.AllowedEmails
+                    .Where(a => a.NormalizedEmail == normalizedEmail)
+                    .SumAsync(a => (int?)a.TaskCredits) ?? 0;
+                if (creditBalance <= 0)
+                    return BadRequest(new { code = "no_access", error = "Yeni bir değerleme task'ı açabilmeniz için yöneticinizin size kredi tanımlaması gerekiyor." });
+
+                company = new Company
+                {
+                    Id = Guid.NewGuid(),
+                    OwnerUserId = userId,
+                    Name = req.CompanyName.Trim(),
+                    Website = CorporateEmailChecker.WebsiteHost(req.Website) ?? req.Website?.Trim(),
+                    Sector = req.Sector?.Trim(),
+                    SubSector = req.SubSector?.Trim(),
+                    Employees = req.Employees?.Trim(),
+                    Revenue = req.Revenue?.Trim(),
+                    Purpose = req.Purpose?.Trim(),
+                    ReportEmail = reportEmail,
+                    ContactFullName = req.FullName?.Trim(),
+                    ContactRole = req.Role?.Trim(),
+                    ContactPhone = req.Phone?.Trim(),
+                    ConfirmationSendCount = 1,
+                    ConfirmationLastSentAt = DateTime.UtcNow,
+                };
+                _context.Companies.Add(company);
+            }
+
             var code = new CodeGenerator().GenerateCode();
-            user.TaskConfirmationCode = code;
-            user.TaskConfirmationCodeExpiry = DateTime.UtcNow.AddMinutes(15);
-            await _userManager.UpdateAsync(user);
+            company.ConfirmationCode = code;
+            company.ConfirmationCodeExpiry = DateTime.UtcNow.AddMinutes(15);
+            await _context.SaveChangesAsync();
 
             _ = Task.Run(async () =>
             {
-                try { await _emailSender.SendConfirmationEmail(user.Email!, code, user.UserName ?? string.Empty); }
+                try { await _emailSender.SendConfirmationEmail(reportEmail, code, user.UserName ?? string.Empty); }
                 catch (Exception ex) { _logger.LogError(ex, "OnboardingStartTask email failed. UserId={UserId}", user.Id); }
             });
 
@@ -196,32 +278,23 @@ namespace FinvestimaAPI.Controllers
         public class OnboardingConfirmTaskRequest
         {
             public string Code { get; set; } = string.Empty;
-            public string CompanyName { get; set; } = string.Empty;
-            public string? Website { get; set; }
-            public string? Sector { get; set; }
-            public string? SubSector { get; set; }
-            public string? Employees { get; set; }
-            public string? Revenue { get; set; }
-            public string? Purpose { get; set; }
-            public string? ReportEmail { get; set; }
-            public string? FullName { get; set; }
-            public string? Role { get; set; }
-            public string? Phone { get; set; }
         }
 
         [HttpPost("onboarding/confirm-task")]
         public async Task<IActionResult> OnboardingConfirmTask([FromBody] OnboardingConfirmTaskRequest req)
         {
-            if (string.IsNullOrWhiteSpace(req.CompanyName)) return BadRequest("Firma adı zorunlu.");
-
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) return Unauthorized();
 
-            if (string.IsNullOrEmpty(user.TaskConfirmationCode)) return BadRequest("Önce bir doğrulama kodu isteyin.");
-            if (user.TaskConfirmationCodeExpiry == null || DateTime.UtcNow > user.TaskConfirmationCodeExpiry)
+            var company = await _context.Companies
+                .Where(c => c.OwnerUserId == userId && c.ConfirmationCode != null && !c.ValuationTasks.Any())
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefaultAsync();
+            if (company == null) return BadRequest("Önce bir doğrulama kodu isteyin.");
+            if (company.ConfirmationCodeExpiry == null || DateTime.UtcNow > company.ConfirmationCodeExpiry)
                 return BadRequest("Kodun süresi doldu. Yeni kod isteyin.");
-            if (req.Code != user.TaskConfirmationCode)
+            if (req.Code != company.ConfirmationCode)
                 return BadRequest("Kod hatalı.");
 
             var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
@@ -231,27 +304,10 @@ namespace FinvestimaAPI.Controllers
             if (creditBalance <= 0)
                 return BadRequest(new { code = "no_access", error = "Yeni bir değerleme task'ı açabilmeniz için yöneticinizin size kredi tanımlaması gerekiyor." });
 
-            user.TaskConfirmationCode = null;
-            user.TaskConfirmationCodeExpiry = null;
-            await _userManager.UpdateAsync(user);
-
-            var company = new Company
-            {
-                Id = Guid.NewGuid(),
-                OwnerUserId = userId,
-                Name = req.CompanyName.Trim(),
-                Website = CorporateEmailChecker.WebsiteHost(req.Website) ?? req.Website?.Trim(),
-                Sector = req.Sector?.Trim(),
-                SubSector = req.SubSector?.Trim(),
-                Employees = req.Employees?.Trim(),
-                Revenue = req.Revenue?.Trim(),
-                Purpose = req.Purpose?.Trim(),
-                ReportEmail = req.ReportEmail?.Trim(),
-                ContactFullName = req.FullName?.Trim(),
-                ContactRole = req.Role?.Trim(),
-                ContactPhone = req.Phone?.Trim(),
-            };
-            _context.Companies.Add(company);
+            company.ConfirmationCode = null;
+            company.ConfirmationCodeExpiry = null;
+            company.ConfirmationSendCount = 0;
+            company.ConfirmationLastSentAt = null;
 
             var task = new ValuationTask { Id = Guid.NewGuid(), CompanyId = company.Id, Title = "Değerleme", UserId = userId };
             _context.ValuationTasks.Add(task);
