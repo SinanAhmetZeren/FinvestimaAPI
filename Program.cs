@@ -94,8 +94,9 @@ builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
     options.Password.RequiredLength = 8;
     options.Password.RequiredUniqueChars = 1;
 
+    // Kullanıcı adı alanı artık "Ad Soyad" olarak kullanılıyor — Türkçe karakterlere izin ver.
     options.User.AllowedUserNameCharacters =
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+ ";
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+ çğıöşüÇĞİÖŞÜ'";
 })
 .AddEntityFrameworkStores<DataContext>()
 .AddDefaultTokenProviders();

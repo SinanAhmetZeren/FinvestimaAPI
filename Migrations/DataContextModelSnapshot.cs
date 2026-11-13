@@ -22,6 +22,40 @@ namespace FinvestimaAPI.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("FinvestimaAPI.Models.AllowedEmail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AddedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("NormalizedEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TaskCredits")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedEmail");
+
+                    b.ToTable("AllowedEmails");
+                });
+
             modelBuilder.Entity("FinvestimaAPI.Models.AppUser", b =>
                 {
                     b.Property<string>("Id")
@@ -50,8 +84,17 @@ namespace FinvestimaAPI.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("FullName")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("KvkkConsent")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("KvkkConsentAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Language")
                         .IsRequired()
@@ -63,6 +106,9 @@ namespace FinvestimaAPI.Migrations
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("MarketingConsent")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -72,6 +118,9 @@ namespace FinvestimaAPI.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<string>("PasswordHash")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Phone")
                         .HasColumnType("text");
 
                     b.Property<string>("PhoneNumber")
@@ -90,8 +139,17 @@ namespace FinvestimaAPI.Migrations
                     b.Property<DateTime?>("RefreshTokenExpiryTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Role")
+                        .HasColumnType("text");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
+
+                    b.Property<string>("TaskConfirmationCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("TaskConfirmationCodeExpiry")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean");
@@ -161,14 +219,49 @@ namespace FinvestimaAPI.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ContactFullName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactPhone")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactRole")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Employees")
+                        .HasColumnType("text");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("OwnerUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Purpose")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReportEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Revenue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Sector")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubSector")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Website")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
 
                     b.ToTable("Companies");
                 });

@@ -11,6 +11,7 @@ using FinvestimaAPI.Models;
 using FinvestimaAPI.Models.ValuatorPro;
 using FinvestimaAPI.Services.ValuatorPro;
 using FinvestimaAPI.Services.Ai;
+using FinvestimaAPI.Services.EmailSender;
 
 namespace FinvestimaAPI.Controllers
 {
@@ -24,14 +25,16 @@ namespace FinvestimaAPI.Controllers
         private readonly DataContext _context;
         private readonly ILogger<ValuatorProController> _logger;
         private readonly UserManager<AppUser> _userManager;
+        private readonly IEmailSender _emailSender;
 
-        public ValuatorProController(ITrialBalanceExtractionService trialBalanceExtractionService, IComparableMultiplesJobService comparableMultiplesJobService, DataContext context, ILogger<ValuatorProController> logger, UserManager<AppUser> userManager)
+        public ValuatorProController(ITrialBalanceExtractionService trialBalanceExtractionService, IComparableMultiplesJobService comparableMultiplesJobService, DataContext context, ILogger<ValuatorProController> logger, UserManager<AppUser> userManager, IEmailSender emailSender)
         {
             _trialBalanceExtractionService = trialBalanceExtractionService;
             _comparableMultiplesJobService = comparableMultiplesJobService;
             _context = context;
             _logger = logger;
             _userManager = userManager;
+            _emailSender = emailSender;
         }
 
         // ── Admin: müşteriye (ödeme/fatura teyit edildikten sonra) hesap + task açar ──────────
@@ -70,6 +73,77 @@ namespace FinvestimaAPI.Controllers
             return Ok(new { user.Id, user.UserName, user.Email });
         }
 
+        // ── Admin: kayıt olabilecek e-posta beyaz listesi ─────────────────────────
+        public class AdminAddAllowedEmailRequest
+        {
+            public string Email { get; set; } = string.Empty;
+            public string? Note { get; set; }
+            public int TaskCredits { get; set; } = 1;
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("admin/allowed-emails")]
+        public async Task<IActionResult> AdminAddAllowedEmail([FromBody] AdminAddAllowedEmailRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.Email))
+                return BadRequest("Email zorunlu.");
+            if (req.TaskCredits < 0)
+                return BadRequest("TaskCredits negatif olamaz.");
+
+            var normalizedEmail = _userManager.NormalizeEmail(req.Email.Trim());
+            var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+
+            // Her "Ekle" ayrı bir defter satırı — mevcut email için de olsa yeni satır eklenir,
+            // üzerine yazılmaz (bkz. AllowedEmail.cs).
+            var allowed = new AllowedEmail
+            {
+                Id = Guid.NewGuid(),
+                Email = req.Email.Trim(),
+                NormalizedEmail = normalizedEmail!,
+                Note = req.Note,
+                AddedByUserId = adminId,
+                TaskCredits = req.TaskCredits,
+            };
+            _context.AllowedEmails.Add(allowed);
+            await _context.SaveChangesAsync();
+            return Ok(new { allowed.Id, allowed.Email, allowed.Note, allowed.CreatedAt, allowed.TaskCredits });
+        }
+
+        // Email bazında gruplanmış bakiye + o bakiyeyi oluşturan tüm satırlar (hover döküm için).
+        [Authorize(Roles = "Admin")]
+        [HttpGet("admin/allowed-emails")]
+        public async Task<IActionResult> AdminListAllowedEmails()
+        {
+            var entries = await _context.AllowedEmails
+                .OrderByDescending(a => a.CreatedAt)
+                .Select(a => new { a.Id, a.Email, a.Note, a.CreatedAt, a.TaskCredits })
+                .ToListAsync();
+
+            var grouped = entries
+                .GroupBy(a => a.Email)
+                .Select(g => new
+                {
+                    email = g.Key,
+                    balance = g.Sum(x => x.TaskCredits),
+                    lastActivity = g.Max(x => x.CreatedAt),
+                    entries = g.OrderByDescending(x => x.CreatedAt),
+                })
+                .OrderByDescending(g => g.lastActivity);
+
+            return Ok(grouped);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpDelete("admin/allowed-emails/{id}")]
+        public async Task<IActionResult> AdminDeleteAllowedEmail(Guid id)
+        {
+            var allowed = await _context.AllowedEmails.FirstOrDefaultAsync(a => a.Id == id);
+            if (allowed == null) return NotFound();
+            _context.AllowedEmails.Remove(allowed);
+            await _context.SaveChangesAsync();
+            return Ok();
+        }
+
         [Authorize(Roles = "Admin")]
         [HttpGet("admin/users")]
         public async Task<IActionResult> AdminListUsers()
@@ -95,6 +169,105 @@ namespace FinvestimaAPI.Controllers
             user.Language = string.IsNullOrWhiteSpace(req.Language) ? "tr" : req.Language.Trim();
             await _userManager.UpdateAsync(user);
             return Ok(new { user.Id, user.Language });
+        }
+
+        // ── A0: giriş yapmış kullanıcı kendi firmasını/task'ını ekliyor ───────────────────
+        [HttpPost("onboarding/start-task")]
+        public async Task<IActionResult> OnboardingStartTask()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return Unauthorized();
+
+            var code = new CodeGenerator().GenerateCode();
+            user.TaskConfirmationCode = code;
+            user.TaskConfirmationCodeExpiry = DateTime.UtcNow.AddMinutes(15);
+            await _userManager.UpdateAsync(user);
+
+            _ = Task.Run(async () =>
+            {
+                try { await _emailSender.SendConfirmationEmail(user.Email!, code, user.UserName ?? string.Empty); }
+                catch (Exception ex) { _logger.LogError(ex, "OnboardingStartTask email failed. UserId={UserId}", user.Id); }
+            });
+
+            return Ok(new { ok = true });
+        }
+
+        public class OnboardingConfirmTaskRequest
+        {
+            public string Code { get; set; } = string.Empty;
+            public string CompanyName { get; set; } = string.Empty;
+            public string? Website { get; set; }
+            public string? Sector { get; set; }
+            public string? SubSector { get; set; }
+            public string? Employees { get; set; }
+            public string? Revenue { get; set; }
+            public string? Purpose { get; set; }
+            public string? ReportEmail { get; set; }
+            public string? FullName { get; set; }
+            public string? Role { get; set; }
+            public string? Phone { get; set; }
+        }
+
+        [HttpPost("onboarding/confirm-task")]
+        public async Task<IActionResult> OnboardingConfirmTask([FromBody] OnboardingConfirmTaskRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.CompanyName)) return BadRequest("Firma adı zorunlu.");
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return Unauthorized();
+
+            if (string.IsNullOrEmpty(user.TaskConfirmationCode)) return BadRequest("Önce bir doğrulama kodu isteyin.");
+            if (user.TaskConfirmationCodeExpiry == null || DateTime.UtcNow > user.TaskConfirmationCodeExpiry)
+                return BadRequest("Kodun süresi doldu. Yeni kod isteyin.");
+            if (req.Code != user.TaskConfirmationCode)
+                return BadRequest("Kod hatalı.");
+
+            var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
+            var creditBalance = await _context.AllowedEmails
+                .Where(a => a.NormalizedEmail == normalizedEmail)
+                .SumAsync(a => (int?)a.TaskCredits) ?? 0;
+            if (creditBalance <= 0)
+                return BadRequest(new { code = "no_access", error = "Yeni bir değerleme task'ı açabilmeniz için yöneticinizin size kredi tanımlaması gerekiyor." });
+
+            user.TaskConfirmationCode = null;
+            user.TaskConfirmationCodeExpiry = null;
+            await _userManager.UpdateAsync(user);
+
+            var company = new Company
+            {
+                Id = Guid.NewGuid(),
+                OwnerUserId = userId,
+                Name = req.CompanyName.Trim(),
+                Website = CorporateEmailChecker.WebsiteHost(req.Website) ?? req.Website?.Trim(),
+                Sector = req.Sector?.Trim(),
+                SubSector = req.SubSector?.Trim(),
+                Employees = req.Employees?.Trim(),
+                Revenue = req.Revenue?.Trim(),
+                Purpose = req.Purpose?.Trim(),
+                ReportEmail = req.ReportEmail?.Trim(),
+                ContactFullName = req.FullName?.Trim(),
+                ContactRole = req.Role?.Trim(),
+                ContactPhone = req.Phone?.Trim(),
+            };
+            _context.Companies.Add(company);
+
+            var task = new ValuationTask { Id = Guid.NewGuid(), CompanyId = company.Id, Title = "Değerleme", UserId = userId };
+            _context.ValuationTasks.Add(task);
+
+            _context.AllowedEmails.Add(new AllowedEmail
+            {
+                Id = Guid.NewGuid(),
+                Email = user.Email!,
+                NormalizedEmail = normalizedEmail!,
+                Note = "Task oluşturuldu: " + company.Name,
+                AddedByUserId = userId,
+                TaskCredits = -1,
+            });
+
+            await _context.SaveChangesAsync();
+            return Ok(new { task.Id, companyName = company.Name });
         }
 
         public class AdminCreateTaskRequest
@@ -665,6 +838,16 @@ namespace FinvestimaAPI.Controllers
                 task.Title,
                 companyId = task.CompanyId,
                 companyName = task.Company?.Name,
+                companyWebsite = task.Company?.Website,
+                companySector = task.Company?.Sector,
+                companySubSector = task.Company?.SubSector,
+                companyEmployees = task.Company?.Employees,
+                companyRevenue = task.Company?.Revenue,
+                companyPurpose = task.Company?.Purpose,
+                companyReportEmail = task.Company?.ReportEmail,
+                companyContactFullName = task.Company?.ContactFullName,
+                companyContactRole = task.Company?.ContactRole,
+                companyContactPhone = task.Company?.ContactPhone,
                 accountingStandard = task.AccountingStandard.ToString(),
                 years = task.TrialBalanceYears.Where(y => !y.IsRemoved).Select(y =>
                 {
@@ -727,6 +910,56 @@ namespace FinvestimaAPI.Controllers
                         .OrderBy(r => r.Year).ThenBy(r => r.Month)
                         .Select(r => new { r.Year, r.Month, r.Currency, r.Revenue, r.MaterialCost, r.Opex, r.IsManualOverride })
                     : null,
+            });
+        }
+
+        public class UpdateCompanyProfileRequest
+        {
+            public string CompanyName { get; set; } = string.Empty;
+            public string? Website { get; set; }
+            public string? Sector { get; set; }
+            public string? SubSector { get; set; }
+            public string? Employees { get; set; }
+            public string? Revenue { get; set; }
+            public string? Purpose { get; set; }
+            public string? ReportEmail { get; set; }
+            public string? ContactFullName { get; set; }
+            public string? ContactRole { get; set; }
+            public string? ContactPhone { get; set; }
+        }
+
+        [HttpPut("valuation-tasks/{valuationTaskId}/company-profile")]
+        public async Task<IActionResult> UpdateCompanyProfile(Guid valuationTaskId, [FromBody] UpdateCompanyProfileRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.CompanyName)) return BadRequest("Firma unvanı zorunlu.");
+
+            var task = await _context.ValuationTasks.Include(t => t.Company).FirstOrDefaultAsync(t => t.Id == valuationTaskId);
+            if (task == null) return NotFound();
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var isAdmin = User.IsInRole("Admin");
+            if (task.UserId != userId && !isAdmin) return Forbid();
+            if (task.Company == null) return NotFound("Firma bulunamadı.");
+
+            task.Company.Name = req.CompanyName.Trim();
+            task.Company.Website = CorporateEmailChecker.WebsiteHost(req.Website) ?? req.Website?.Trim();
+            task.Company.Sector = req.Sector?.Trim();
+            task.Company.SubSector = req.SubSector?.Trim();
+            task.Company.Employees = req.Employees?.Trim();
+            task.Company.Revenue = req.Revenue?.Trim();
+            task.Company.Purpose = req.Purpose?.Trim();
+            task.Company.ReportEmail = req.ReportEmail?.Trim();
+            task.Company.ContactFullName = req.ContactFullName?.Trim();
+            task.Company.ContactRole = req.ContactRole?.Trim();
+            task.Company.ContactPhone = req.ContactPhone?.Trim();
+
+            await _context.SaveChangesAsync();
+            return Ok(new
+            {
+                companyName = task.Company.Name, website = task.Company.Website, sector = task.Company.Sector,
+                subSector = task.Company.SubSector, employees = task.Company.Employees, revenue = task.Company.Revenue,
+                purpose = task.Company.Purpose, reportEmail = task.Company.ReportEmail,
+                contactFullName = task.Company.ContactFullName, contactRole = task.Company.ContactRole, contactPhone = task.Company.ContactPhone,
             });
         }
     }

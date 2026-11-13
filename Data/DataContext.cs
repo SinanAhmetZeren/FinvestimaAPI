@@ -10,6 +10,7 @@ namespace FinvestimaAPI.Data
         public DataContext(DbContextOptions<DataContext> options) : base(options) { }
 
         public DbSet<ExchangeRate> ExchangeRates { get; set; }
+        public DbSet<AllowedEmail> AllowedEmails { get; set; }
         public DbSet<Company> Companies { get; set; }
         public DbSet<ValuationTask> ValuationTasks { get; set; }
         public DbSet<TrialBalanceYear> TrialBalanceYears { get; set; }
@@ -34,6 +35,13 @@ namespace FinvestimaAPI.Data
             modelBuilder.Entity<ExchangeRate>()
                 .HasIndex(r => r.Date)
                 .IsUnique();
+
+            // Artık defter (ledger): aynı email için birden çok satır olabilir (her ekleme/kullanım ayrı satır).
+            modelBuilder.Entity<AllowedEmail>()
+                .HasIndex(a => a.NormalizedEmail);
+
+            modelBuilder.Entity<Company>()
+                .HasIndex(c => c.OwnerUserId);
 
             modelBuilder.Entity<Company>()
                 .HasMany(c => c.ValuationTasks)
