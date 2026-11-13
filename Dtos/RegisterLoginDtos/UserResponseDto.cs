@@ -10,6 +10,8 @@ namespace FinvestimaAPI.Dtos.RegisterLoginDtos
         public DateTime? RefreshTokenExpiryTime { get; set; }
         public bool IsAdmin { get; set; } = false;
         public string Language { get; set; } = "tr";
+        public bool IsApprovedForPurchase { get; set; } = false;
+        public int CreditBalance { get; set; } = 0;
 
         public string? FullName { get; set; }
         public string? Role { get; set; }

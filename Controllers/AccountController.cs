@@ -96,20 +96,8 @@ namespace FinvestimaAPI.Controllers
             if (!Regex.IsMatch(registerDto.Email.Trim(), @"^[^\s@]+@[^\s@]+\.[^\s@]+$"))
                 return BadRequest("Invalid email format.");
 
-            var (corpOk, corpError) = CorporateEmailChecker.Check(registerDto.Email, registerDto.Website);
-            if (!corpOk) return BadRequest(corpError);
-
             var normalizedEmail = _userManager.NormalizeEmail(registerDto.Email.Trim());
             var normalizedUserName = _userManager.NormalizeName(trimmedUsername);
-
-            var creditBalance = await _context.AllowedEmails
-                .Where(a => a.NormalizedEmail == normalizedEmail)
-                .SumAsync(a => (int?)a.TaskCredits) ?? 0;
-            if (creditBalance <= 0)
-            {
-                _logger.LogWarning("Register blocked. No task credits left: {Email}", registerDto.Email);
-                return BadRequest(new { code = "no_access", error = "Bu e-posta adresiyle kayıt olabilmeniz için önce yöneticinizin size erişim tanımlaması gerekiyor. Lütfen yöneticinizle iletişime geçin." });
-            }
 
             var existingUser = await _userManager.Users
                 .FirstOrDefaultAsync(u =>
@@ -137,7 +125,6 @@ namespace FinvestimaAPI.Controllers
                 existingUser.ConfirmationCode = confirmationCode;
                 existingUser.NormalizedUserName = normalizedUserName;
                 existingUser.NormalizedEmail = normalizedEmail;
-                ApplyProfileFields(existingUser, registerDto);
 
                 var passwordHasher = new PasswordHasher<AppUser>();
                 existingUser.PasswordHash = passwordHasher.HashPassword(existingUser, registerDto.Password);
@@ -150,9 +137,6 @@ namespace FinvestimaAPI.Controllers
                     _logger.LogError("User update failed during re-register. UserId: {UserId}", existingUser.Id);
                     return StatusCode(500);
                 }
-
-                await UpsertOwnerCompanyAndTaskAsync(existingUser.Id, registerDto);
-                await _context.SaveChangesAsync();
 
                 SendConfirmationEmailSafe(existingUser);
                 return await CreateUserObject(existingUser);
@@ -170,7 +154,6 @@ namespace FinvestimaAPI.Controllers
                 NormalizedUserName = normalizedUserName,
                 PublicId = await GenerateUniquePublicId(),
             };
-            ApplyProfileFields(newUser, registerDto);
 
             var createResult = await _userManager.CreateAsync(newUser, registerDto.Password);
             if (!createResult.Succeeded)
@@ -183,9 +166,6 @@ namespace FinvestimaAPI.Controllers
             newUser.RefreshToken = _tokenService.GenerateRefreshToken();
             newUser.RefreshTokenExpiryTime = DateTime.UtcNow.Add(RefreshExpiry);
             await _userManager.UpdateAsync(newUser);
-
-            await UpsertOwnerCompanyAndTaskAsync(newUser.Id, registerDto);
-            await _context.SaveChangesAsync();
 
             SendConfirmationEmailSafe(newUser);
 
@@ -314,69 +294,13 @@ namespace FinvestimaAPI.Controllers
             return userResponse;
         }
 
-        private static void ApplyProfileFields(AppUser user, RegisterDto dto)
-        {
-            if (!string.IsNullOrWhiteSpace(dto.FullName)) user.FullName = dto.FullName.Trim();
-            if (!string.IsNullOrWhiteSpace(dto.Role)) user.Role = dto.Role.Trim();
-            if (!string.IsNullOrWhiteSpace(dto.Phone)) user.Phone = dto.Phone.Trim();
-            if (dto.KvkkConsent) { user.KvkkConsent = true; user.KvkkConsentAt = DateTime.UtcNow; }
-            user.MarketingConsent = dto.MarketingConsent;
-        }
-
-        // Firma profilini kaydeder ve — ilk onboarding ise ve kredi varsa — otomatik bir
-        // ValuationTask açar (admin'in elle "Task oluştur" yapmasının yerini alır).
-        private async Task UpsertOwnerCompanyAndTaskAsync(string userId, RegisterDto dto)
-        {
-            if (string.IsNullOrWhiteSpace(dto.CompanyName)) return;
-
-            var normalizedEmail = _userManager.NormalizeEmail(dto.Email.Trim());
-            var company = await _context.Companies
-                .Include(c => c.ValuationTasks)
-                .FirstOrDefaultAsync(c => c.OwnerUserId == userId);
-            var isFirstOnboarding = company == null;
-            if (company == null)
-            {
-                company = new Models.ValuatorPro.Company { Id = Guid.NewGuid(), OwnerUserId = userId };
-                _context.Companies.Add(company);
-            }
-
-            company.Name = dto.CompanyName.Trim();
-            company.Website = CorporateEmailChecker.WebsiteHost(dto.Website) ?? dto.Website?.Trim();
-            company.Sector = dto.Sector?.Trim();
-            company.SubSector = dto.SubSector?.Trim();
-            company.Employees = dto.Employees?.Trim();
-            company.Revenue = dto.Revenue?.Trim();
-            company.Purpose = dto.Purpose?.Trim();
-
-            if (isFirstOnboarding)
-            {
-                var balance = await _context.AllowedEmails.Where(a => a.NormalizedEmail == normalizedEmail).SumAsync(a => (int?)a.TaskCredits) ?? 0;
-                if (balance > 0)
-                {
-                    _context.ValuationTasks.Add(new Models.ValuatorPro.ValuationTask
-                    {
-                        Id = Guid.NewGuid(),
-                        CompanyId = company.Id,
-                        Title = "Değerleme",
-                        UserId = userId,
-                    });
-                    // Kullanım satırı: bakiyeden bir kredi düşer, ayrı bir defter satırı olarak.
-                    _context.AllowedEmails.Add(new AllowedEmail
-                    {
-                        Id = Guid.NewGuid(),
-                        Email = dto.Email.Trim(),
-                        NormalizedEmail = normalizedEmail!,
-                        Note = "Task oluşturuldu: " + company.Name,
-                        AddedByUserId = userId,
-                        TaskCredits = -1,
-                    });
-                }
-            }
-        }
-
         private async Task<UserResponseDto> CreateUserObject(AppUser user)
         {
             var company = await _context.Companies.FirstOrDefaultAsync(c => c.OwnerUserId == user.Id);
+            var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
+            var creditBalance = await _context.CreditLedgerEntries
+                .Where(a => a.NormalizedEmail == normalizedEmail)
+                .SumAsync(a => (int?)a.Credits) ?? 0;
             return new UserResponseDto
             {
                 Token = _tokenService.CreateToken(user),
@@ -387,6 +311,8 @@ namespace FinvestimaAPI.Controllers
                 RefreshTokenExpiryTime = user.RefreshTokenExpiryTime,
                 IsAdmin = user.IsAdmin,
                 Language = user.Language,
+                IsApprovedForPurchase = user.IsApprovedForPurchase,
+                CreditBalance = creditBalance,
                 FullName = user.FullName,
                 Role = user.Role,
                 Phone = user.Phone,

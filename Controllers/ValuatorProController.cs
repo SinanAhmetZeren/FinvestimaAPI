@@ -74,49 +74,49 @@ namespace FinvestimaAPI.Controllers
         }
 
         // ── Admin: kayıt olabilecek e-posta beyaz listesi ─────────────────────────
-        public class AdminAddAllowedEmailRequest
+        public class AdminAddCreditEntryRequest
         {
             public string Email { get; set; } = string.Empty;
             public string? Note { get; set; }
-            public int TaskCredits { get; set; } = 1;
+            public int Credits { get; set; } = 1;
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("admin/allowed-emails")]
-        public async Task<IActionResult> AdminAddAllowedEmail([FromBody] AdminAddAllowedEmailRequest req)
+        [HttpPost("admin/credit-ledger")]
+        public async Task<IActionResult> AdminAddCreditEntry([FromBody] AdminAddCreditEntryRequest req)
         {
             if (string.IsNullOrWhiteSpace(req.Email))
                 return BadRequest("Email zorunlu.");
-            if (req.TaskCredits < 0)
-                return BadRequest("TaskCredits negatif olamaz.");
+            if (req.Credits < 0)
+                return BadRequest("Credits negatif olamaz.");
 
             var normalizedEmail = _userManager.NormalizeEmail(req.Email.Trim());
             var adminId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
             // Her "Ekle" ayrı bir defter satırı — mevcut email için de olsa yeni satır eklenir,
-            // üzerine yazılmaz (bkz. AllowedEmail.cs).
-            var allowed = new AllowedEmail
+            // üzerine yazılmaz (bkz. CreditLedgerEntry.cs).
+            var allowed = new CreditLedgerEntry
             {
                 Id = Guid.NewGuid(),
                 Email = req.Email.Trim(),
                 NormalizedEmail = normalizedEmail!,
                 Note = req.Note,
                 AddedByUserId = adminId,
-                TaskCredits = req.TaskCredits,
+                Credits = req.Credits,
             };
-            _context.AllowedEmails.Add(allowed);
+            _context.CreditLedgerEntries.Add(allowed);
             await _context.SaveChangesAsync();
-            return Ok(new { allowed.Id, allowed.Email, allowed.Note, allowed.CreatedAt, allowed.TaskCredits });
+            return Ok(new { allowed.Id, allowed.Email, allowed.Note, allowed.CreatedAt, allowed.Credits });
         }
 
         // Email bazında gruplanmış bakiye + o bakiyeyi oluşturan tüm satırlar (hover döküm için).
         [Authorize(Roles = "Admin")]
-        [HttpGet("admin/allowed-emails")]
-        public async Task<IActionResult> AdminListAllowedEmails()
+        [HttpGet("admin/credit-ledger")]
+        public async Task<IActionResult> AdminListCreditLedger()
         {
-            var entries = await _context.AllowedEmails
+            var entries = await _context.CreditLedgerEntries
                 .OrderByDescending(a => a.CreatedAt)
-                .Select(a => new { a.Id, a.Email, a.Note, a.CreatedAt, a.TaskCredits })
+                .Select(a => new { a.Id, a.Email, a.Note, a.CreatedAt, a.Credits })
                 .ToListAsync();
 
             var grouped = entries
@@ -124,7 +124,7 @@ namespace FinvestimaAPI.Controllers
                 .Select(g => new
                 {
                     email = g.Key,
-                    balance = g.Sum(x => x.TaskCredits),
+                    balance = g.Sum(x => x.Credits),
                     lastActivity = g.Max(x => x.CreatedAt),
                     entries = g.OrderByDescending(x => x.CreatedAt),
                 })
@@ -134,14 +134,30 @@ namespace FinvestimaAPI.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpDelete("admin/allowed-emails/{id}")]
-        public async Task<IActionResult> AdminDeleteAllowedEmail(Guid id)
+        [HttpDelete("admin/credit-ledger/{id}")]
+        public async Task<IActionResult> AdminDeleteCreditEntry(Guid id)
         {
-            var allowed = await _context.AllowedEmails.FirstOrDefaultAsync(a => a.Id == id);
+            var allowed = await _context.CreditLedgerEntries.FirstOrDefaultAsync(a => a.Id == id);
             if (allowed == null) return NotFound();
-            _context.AllowedEmails.Remove(allowed);
+            _context.CreditLedgerEntries.Remove(allowed);
             await _context.SaveChangesAsync();
             return Ok();
+        }
+
+        // Kullanıcının kendi onay durumu + kredi bakiyesi — A0 (Kredi satın al) ekranı için.
+        [HttpGet("me")]
+        public async Task<IActionResult> Me()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return Unauthorized();
+
+            var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
+            var creditBalance = await _context.CreditLedgerEntries
+                .Where(a => a.NormalizedEmail == normalizedEmail)
+                .SumAsync(a => (int?)a.Credits) ?? 0;
+
+            return Ok(new { isApproved = user.IsApprovedForPurchase, creditBalance });
         }
 
         [Authorize(Roles = "Admin")]
@@ -150,9 +166,20 @@ namespace FinvestimaAPI.Controllers
         {
             var users = await _userManager.Users
                 .OrderBy(u => u.UserName)
-                .Select(u => new { u.Id, u.UserName, u.Email, u.Language })
+                .Select(u => new { u.Id, u.UserName, u.Email, u.Language, u.IsApprovedForPurchase })
                 .ToListAsync();
-            return Ok(users);
+            return Ok(users.Select(u => new { u.Id, u.UserName, u.Email, u.Language, isApproved = u.IsApprovedForPurchase }));
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPut("admin/users/{userId}/approve")]
+        public async Task<IActionResult> AdminApproveUser(string userId)
+        {
+            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return NotFound();
+            user.IsApprovedForPurchase = true;
+            await _userManager.UpdateAsync(user);
+            return Ok(new { user.Id, isApproved = user.IsApprovedForPurchase });
         }
 
         public class AdminUpdateUserLanguageRequest
@@ -234,9 +261,9 @@ namespace FinvestimaAPI.Controllers
             else
             {
                 var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
-                var creditBalance = await _context.AllowedEmails
+                var creditBalance = await _context.CreditLedgerEntries
                     .Where(a => a.NormalizedEmail == normalizedEmail)
-                    .SumAsync(a => (int?)a.TaskCredits) ?? 0;
+                    .SumAsync(a => (int?)a.Credits) ?? 0;
                 if (creditBalance <= 0)
                     return BadRequest(new { code = "no_access", error = "Yeni bir değerleme task'ı açabilmeniz için yöneticinizin size kredi tanımlaması gerekiyor." });
 
@@ -298,9 +325,9 @@ namespace FinvestimaAPI.Controllers
                 return BadRequest("Kod hatalı.");
 
             var normalizedEmail = _userManager.NormalizeEmail(user.Email!.Trim());
-            var creditBalance = await _context.AllowedEmails
+            var creditBalance = await _context.CreditLedgerEntries
                 .Where(a => a.NormalizedEmail == normalizedEmail)
-                .SumAsync(a => (int?)a.TaskCredits) ?? 0;
+                .SumAsync(a => (int?)a.Credits) ?? 0;
             if (creditBalance <= 0)
                 return BadRequest(new { code = "no_access", error = "Yeni bir değerleme task'ı açabilmeniz için yöneticinizin size kredi tanımlaması gerekiyor." });
 
@@ -312,14 +339,14 @@ namespace FinvestimaAPI.Controllers
             var task = new ValuationTask { Id = Guid.NewGuid(), CompanyId = company.Id, Title = "Değerleme", UserId = userId };
             _context.ValuationTasks.Add(task);
 
-            _context.AllowedEmails.Add(new AllowedEmail
+            _context.CreditLedgerEntries.Add(new CreditLedgerEntry
             {
                 Id = Guid.NewGuid(),
                 Email = user.Email!,
                 NormalizedEmail = normalizedEmail!,
                 Note = "Task oluşturuldu: " + company.Name,
                 AddedByUserId = userId,
-                TaskCredits = -1,
+                Credits = -1,
             });
 
             await _context.SaveChangesAsync();

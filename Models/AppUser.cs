@@ -20,9 +20,8 @@ namespace FinvestimaAPI.Models
         public DateTime? KvkkConsentAt { get; set; }
         public bool MarketingConsent { get; set; } = false;
 
-        // A0: zaten login olmuş kullanıcının yeni bir firma/task eklemek için istediği
-        // doğrulama kodu — kendi hesap e-postasına gönderilir (bkz. ValuatorProController).
-        public string? TaskConfirmationCode { get; set; }
-        public DateTime? TaskConfirmationCodeExpiry { get; set; }
+        // Admin tarafından "screening" sonrası onaylandı mı — onaylanmadan Sanal POS'tan
+        // kredi satın alamaz (bkz. ValuatorProController.AdminApproveUser).
+        public bool IsApprovedForPurchase { get; set; } = false;
     }
 }
